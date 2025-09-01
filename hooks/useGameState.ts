@@ -13,8 +13,8 @@ const defaultUserData: User = {
   firstName: "User",
   lastName: "",
   avatarUrl: "",
-  balance: 0, // DRX balance
-  ucBalance: 0, // UC balance
+  balance: 0,
+  ucBalance: 0,
   energyLimit: 500,
   multiTapValue: 1,
   rechargingSpeed: 1,
@@ -32,13 +32,12 @@ const defaultUserData: User = {
   streak: 0,
   combo: 0,
   lastTapTime: 0,
-  // Mining specific
   isMining: false,
   miningStartTime: 0,
   lastClaimTime: 0,
   pendingRewards: 0,
   miningRate: GAME_CONFIG.BASE_MINING_RATE,
-  minClaimTime: GAME_CONFIG.MIN_CLAIM_TIME, // 30 minutes
+  minClaimTime: GAME_CONFIG.MIN_CLAIM_TIME,
   settings: {
     sound: true,
     vibration: true,
@@ -71,7 +70,7 @@ export const useGameState = () => {
   })
   const [loading, setLoading] = useState(true)
 
-  // Define the actual save function
+  // Optimized save function with debouncing
   const performSave = useCallback(async () => {
     if (!user.id || !user.authKey) return
 
@@ -86,8 +85,7 @@ export const useGameState = () => {
     }
   }, [user])
 
-  // Create a debounced version of the save function
-  const debouncedSaveUserData = useCallback(debounce(performSave, 500), [performSave])
+  const debouncedSaveUserData = useCallback(debounce(performSave, 1000), [performSave])
 
   // Initialize user and game
   const initializeGame = useCallback(async () => {
@@ -101,11 +99,11 @@ export const useGameState = () => {
       const authKey = getUrlParameter("authKey")
       
       if (!authKey) {
-        // Stay in loading if no auth key provided
         return
       }
       
-      // Set Telegram init data for validation
+      // Set auth data
+      apiService.setAuthKey(authKey)
       if (telegramInitData) {
         apiService.setTelegramInitData(telegramInitData)
       }
@@ -124,9 +122,6 @@ export const useGameState = () => {
       if (!authResult.success) {
         throw new Error('Authentication failed')
       }
-      
-      // Set auth key for future requests
-      apiService.setAuthKey(authKey)
 
       if (!authResult.isNewUser && authResult.userData) {
         // Existing user with valid auth
@@ -138,21 +133,9 @@ export const useGameState = () => {
           isReturningUser: true 
         }
         
-        // Calculate offline mining rewards if user was mining
-        if (existingUser.isMining && existingUser.miningStartTime) {
-          const now = Date.now()
-          const offlineDuration = Math.floor((now - existingUser.miningStartTime) / 1000)
-          const limitedDuration = Math.min(offlineDuration, GAME_CONFIG.MAX_MINING_TIME)
-          
-          if (limitedDuration > 0) {
-            const { earned } = gameLogic.calculateMiningRewards(existingUser, limitedDuration)
-            existingUser.pendingRewards = earned
-          }
-        }
-        
         setUser(existingUser)
       } else {
-        // New user - create account
+        // New user
         const newUser = { 
           ...defaultUserData,
           ...authResult.userData,
@@ -166,64 +149,70 @@ export const useGameState = () => {
       setLoading(false)
     } catch (error) {
       console.error("Failed to initialize game:", error)
-      // Stay in loading state on error
     }
   }, [])
 
   // Start mining
-  const startMining = useCallback(() => {
+  const startMining = useCallback(async () => {
     if (user.isMining) return { success: false, message: "Already mining!" }
 
-    const now = Date.now()
-    const updatedUser = {
-      ...user,
-      isMining: true,
-      miningStartTime: now,
-      pendingRewards: 0,
+    try {
+      const result = await apiService.startMining(user.id)
+      if (result.success) {
+        const now = Date.now()
+        const updatedUser = {
+          ...user,
+          isMining: true,
+          miningStartTime: now,
+          pendingRewards: 0,
+        }
+        setUser(updatedUser)
+        telegram.hapticFeedback("success")
+        return { success: true, message: "Mining started!" }
+      }
+    } catch (error) {
+      console.error("Failed to start mining:", error)
     }
-
-    setUser(updatedUser)
-    // Save immediately for mining start
-    apiService.updateUser(updatedUser.id, updatedUser)
-    telegram.hapticFeedback("success")
-
-    return { success: true, message: "Mining started!" }
-  }, [user, debouncedSaveUserData])
+    
+    return { success: false, message: "Failed to start mining" }
+  }, [user])
 
   // Claim mining rewards
-  const claimMiningRewards = useCallback(() => {
+  const claimMiningRewards = useCallback(async () => {
     if (!gameLogic.canClaimMining(user)) {
       telegram.hapticFeedback("error")
       return { success: false, message: "Mining time not reached!" }
     }
 
-    const duration = gameLogic.getMiningDuration(user)
-    const { earned, type, xp } = gameLogic.calculateMiningRewards(user, duration)
-
-    const updatedUser = {
-      ...user,
-      balance: user.balance + earned,
-      totalEarned: user.totalEarned + earned,
-      isMining: false,
-      miningStartTime: 0,
-      pendingRewards: 0,
-      lastClaimTime: Date.now(),
-      xp: user.xp + xp,
+    try {
+      const result = await apiService.claimMining(user.id)
+      if (result.success) {
+        const updatedUser = {
+          ...user,
+          balance: user.balance + result.earned,
+          totalEarned: user.totalEarned + result.earned,
+          isMining: false,
+          miningStartTime: 0,
+          pendingRewards: 0,
+          lastClaimTime: Date.now(),
+          xp: user.xp + (result.xp || 0),
+        }
+        setUser(updatedUser)
+        telegram.hapticFeedback("success")
+        return { 
+          success: true, 
+          earned: result.earned, 
+          message: `Claimed ${gameLogic.formatNumber(result.earned)} DRX!` 
+        }
+      }
+    } catch (error) {
+      console.error("Failed to claim rewards:", error)
     }
+    
+    return { success: false, message: "Failed to claim rewards" }
+  }, [user])
 
-    setUser(updatedUser)
-    debouncedSaveUserData()
-    telegram.hapticFeedback("success")
-
-    return { 
-      success: true, 
-      earned, 
-      type, 
-      message: `Claimed ${gameLogic.formatNumber(earned)} DRX!` 
-    }
-  }, [user, debouncedSaveUserData])
-
-  // Upgrade functions
+  // Upgrade boost
   const upgradeBoost = useCallback(
     async (boostType: "miningSpeed" | "claimTime" | "miningRate") => {
       const currentLevel = user.boosts[`${boostType}Level` as keyof typeof user.boosts]
@@ -234,30 +223,34 @@ export const useGameState = () => {
         return { success: false, message: `Need ${gameLogic.formatNumber(cost)} DRX` }
       }
 
-      const updates: Partial<User> = {
-        balance: user.balance - cost,
-        boosts: { ...user.boosts, [`${boostType}Level`]: currentLevel + 1 },
+      try {
+        const result = await apiService.upgradeBoost(user.id, boostType)
+        if (result.success) {
+          const updates: Partial<User> = {
+            balance: user.balance - cost,
+            boosts: { ...user.boosts, [`${boostType}Level`]: currentLevel + 1 },
+          }
+
+          // Update mining rate and claim time
+          const newMiningSpeedLevel = boostType === "miningSpeed" ? currentLevel + 1 : user.boosts.miningSpeedLevel
+          const newClaimTimeLevel = boostType === "claimTime" ? currentLevel + 1 : user.boosts.claimTimeLevel
+          const newMiningRateLevel = boostType === "miningRate" ? currentLevel + 1 : user.boosts.miningRateLevel
+          
+          const miningRateMultiplier = Math.pow(GAME_CONFIG.MINING_RATE_MULTIPLIER, (newMiningRateLevel || 1) - 1)
+          const miningSpeedMultiplier = Math.pow(GAME_CONFIG.MINING_SPEED_MULTIPLIER, (newMiningSpeedLevel || 1) - 1)
+          updates.miningRate = GAME_CONFIG.BASE_MINING_RATE * miningRateMultiplier * miningSpeedMultiplier
+          updates.minClaimTime = Math.max(300, GAME_CONFIG.MIN_CLAIM_TIME - (GAME_CONFIG.CLAIM_TIME_REDUCTION * ((newClaimTimeLevel || 1) - 1)))
+
+          const updatedUser = { ...user, ...updates }
+          setUser(updatedUser)
+          telegram.hapticFeedback("success")
+          return { success: true, message: `${boostType} upgraded!` }
+        }
+      } catch (error) {
+        console.error("Failed to upgrade boost:", error)
       }
-
-      // Calculate new mining rate and claim time based on all boosts
-      const newMiningSpeedLevel = boostType === "miningSpeed" ? currentLevel + 1 : user.boosts.miningSpeedLevel
-      const newClaimTimeLevel = boostType === "claimTime" ? currentLevel + 1 : user.boosts.claimTimeLevel
-      const newMiningRateLevel = boostType === "miningRate" ? currentLevel + 1 : user.boosts.miningRateLevel
       
-      // Update mining rate with combined boosts
-      const miningRateMultiplier = Math.pow(GAME_CONFIG.MINING_RATE_MULTIPLIER, (newMiningRateLevel || 1) - 1)
-      const miningSpeedMultiplier = Math.pow(GAME_CONFIG.MINING_SPEED_MULTIPLIER, (newMiningSpeedLevel || 1) - 1)
-      updates.miningRate = GAME_CONFIG.BASE_MINING_RATE * miningRateMultiplier * miningSpeedMultiplier
-      
-      // Update claim time
-      updates.minClaimTime = Math.max(300, GAME_CONFIG.MIN_CLAIM_TIME - (GAME_CONFIG.CLAIM_TIME_REDUCTION * ((newClaimTimeLevel || 1) - 1)))
-
-      const updatedUser = { ...user, ...updates }
-      setUser(updatedUser)
-      await apiService.updateUser(updatedUser.id, updatedUser)
-
-      telegram.hapticFeedback("success")
-      return { success: true, message: `${boostType} upgraded!` }
+      return { success: false, message: "Failed to upgrade boost" }
     },
     [user],
   )
@@ -280,12 +273,6 @@ export const useGameState = () => {
     telegram.hapticFeedback("success")
     return { success: true, message: `Claimed ${GAME_CONFIG.WELCOME_BONUS} DRX!` }
   }, [user])
-
-  // Mining interval effect
-  useEffect(() => {
-    // No real-time interval needed - mining works offline
-    // Rewards are calculated based on time difference when user returns
-  }, [user.isMining, gameState.dataLoaded])
 
   // Initialize on mount
   useEffect(() => {

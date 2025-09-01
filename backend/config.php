@@ -15,8 +15,8 @@ define('RATE_LIMIT_WINDOW', 3600); // 1 hour
 define('WELCOME_BONUS', 100);
 define('REFERRAL_BONUS', 200);
 define('BASE_MINING_RATE', 0.001);
-define('MIN_CLAIM_TIME', 300); // 5 minutes minimum claim time
-define('MAX_MINING_TIME', 86400); // 24 hours
+define('MIN_CLAIM_TIME', 1800); // 30 minutes minimum mining time
+define('MAX_MINING_TIME', 2340); // 39 minutes maximum mining time
 define('CLAIM_TIME_REDUCTION', 60); // seconds per boost level
 
 // Bot configuration

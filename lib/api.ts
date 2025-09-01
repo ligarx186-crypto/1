@@ -1,4 +1,4 @@
-// PHP Backend API Service with Telegram Authentication
+// Optimized PHP Backend API Service with Telegram Authentication
 const API_BASE_URL = '/backend/api.php'
 
 class APIService {
@@ -78,6 +78,35 @@ class APIService {
     })
   }
   
+  // Fast mining status check without auth
+  async getMiningStatus(userId: string) {
+    return this.request(`mining-status&userId=${userId}`)
+  }
+  
+  // Start mining
+  async startMining(userId: string) {
+    return this.request(`user&userId=${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ startMining: true })
+    })
+  }
+  
+  // Claim mining rewards
+  async claimMining(userId: string) {
+    return this.request(`user&userId=${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ claimMining: true })
+    })
+  }
+  
+  // Upgrade boost
+  async upgradeBoost(userId: string, boostType: string) {
+    return this.request(`user&userId=${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ upgradeBoost: boostType })
+    })
+  }
+  
   // Mission operations
   async getMissions() {
     return this.request('missions')
@@ -118,12 +147,12 @@ class APIService {
   
   async getBotUsername() {
     const config = await this.getConfig()
-    return config.botUsername || 'UCCoinUltraBot'
+    return config.bot_username || 'UCCoinUltraBot'
   }
   
   async getBannerUrl() {
     const config = await this.getConfig()
-    return config.bannerUrl || 'https://mining-master.onrender.com//assets/banner-BH8QO14f.png'
+    return config.banner_url || 'https://mining-master.onrender.com//assets/banner-BH8QO14f.png'
   }
   
   // Wallet operations

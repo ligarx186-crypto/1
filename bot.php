@@ -4,7 +4,7 @@ require_once 'backend/config.php';
 // Bot configuration
 $botToken = BOT_TOKEN;
 $botUsername = BOT_USERNAME;
-$webAppUrl = WEBAPP_URL; // Will be set in config
+$webAppUrl = WEBAPP_URL;
 
 class TelegramBot {
     private $db;
@@ -51,7 +51,7 @@ class TelegramBot {
     }
     
     private function generateRefAuth() {
-        return bin2hex(random_bytes(16)); // 32 character hex string
+        return bin2hex(random_bytes(16));
     }
     
     private function generateAuthUrl($userId, $authKey, $refId = null, $refAuth = null) {
@@ -114,8 +114,11 @@ class TelegramBot {
             
             $stmt = $this->db->prepare("INSERT INTO users (
                 id, first_name, last_name, avatar_url, auth_key, ref_auth,
-                referred_by, ref_auth_used, joined_at, last_active, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')");
+                referred_by, ref_auth_used, joined_at, last_active, 
+                balance, total_earned, mining_rate, min_claim_time, 
+                mining_speed_level, claim_time_level, mining_rate_level,
+                bonus_claimed, data_initialized, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, FALSE, 'active')");
             
             $stmt->execute([
                 $userData['id'],
@@ -127,7 +130,12 @@ class TelegramBot {
                 $userData['referred_by'] ?? '',
                 $userData['ref_auth_used'] ?? '',
                 $now,
-                $now
+                $now,
+                0, // No welcome bonus here - will be claimed in app
+                0,
+                BASE_MINING_RATE,
+                MIN_CLAIM_TIME,
+                1, 1, 1
             ]);
             
             $this->db->commit();
@@ -146,8 +154,6 @@ class TelegramBot {
         if (!$update) {
             return;
         }
-        
-        $this->log("Received update: " . json_encode($update));
         
         if (isset($update['message'])) {
             $this->handleMessage($update['message']);
@@ -202,7 +208,7 @@ class TelegramBot {
                 
                 $welcomeText = "🎮 Welcome back, {$user['first_name']}!\n\n⛏️ Continue your DRX mining journey!";
             } else {
-                // New user - create account with only Telegram data
+                // New user - create account with Telegram data
                 $userData = [
                     'id' => $userId,
                     'first_name' => $user['first_name'],
@@ -264,8 +270,8 @@ class TelegramBot {
         $helpText = "🎮 <b>DRX Mining Bot Help</b>\n\n";
         $helpText .= "⛏️ <b>Mining:</b>\n";
         $helpText .= "• Start mining to earn DRX coins\n";
-        $helpText .= "• Minimum mining time: 5 minutes\n";
-        $helpText .= "• Maximum mining time: 24 hours\n";
+        $helpText .= "• Minimum mining time: 30 minutes\n";
+        $helpText .= "• Maximum mining time: 39 minutes\n";
         $helpText .= "• Works offline - rewards accumulate!\n\n";
         $helpText .= "🚀 <b>Boosts:</b>\n";
         $helpText .= "• Mining Speed: Increase efficiency\n";
@@ -301,10 +307,10 @@ class TelegramBot {
             }
             
             $statsText = "📊 <b>Your Statistics</b>\n\n";
-            $statsText .= "👤 <b>User ID:</b> {$userData['id']}\n";
-            $statsText .= "📅 <b>Joined:</b> " . date('Y-m-d', $userData['joined_at']/1000) . "\n";
-            $statsText .= "🔑 <b>Auth Key:</b> " . substr($userData['auth_key'], 0, 8) . "...\n";
-            $statsText .= "🔗 <b>Ref Auth:</b> " . substr($userData['ref_auth'], 0, 8) . "...\n\n";
+            $statsText .= "💰 <b>Balance:</b> " . number_format($userData['balance'], 3) . " DRX\n";
+            $statsText .= "⛏️ <b>Total Earned:</b> " . number_format($userData['total_earned'], 3) . " DRX\n";
+            $statsText .= "👥 <b>Referrals:</b> {$userData['referral_count']}\n";
+            $statsText .= "📅 <b>Joined:</b> " . date('Y-m-d', $userData['joined_at']/1000) . "\n\n";
             $statsText .= "🎮 <b>Open the app to see full statistics!</b>";
             
             $keyboard = [

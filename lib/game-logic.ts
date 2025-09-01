@@ -2,15 +2,17 @@ import type { User } from "@/types"
 
 // Updated game config for DRX mining system
 export const GAME_CONFIG = {
-  // These will be loaded from backend config
   REFERRAL_BONUS: 200,
   BASE_MINING_RATE: 0.001,
   WELCOME_BONUS: 100,
-  MIN_CLAIM_TIME: 300, // 5 minutes
+  MIN_CLAIM_TIME: 1800, // 30 minutes
   MAX_MINING_TIME: 2340, // 39 minutes
+  MIN_CLAIM_INTERVAL: 300, // 5 minutes between claims
   MINING_SPEED_MULTIPLIER: 1.2,
   CLAIM_TIME_REDUCTION: 60,
   MINING_RATE_MULTIPLIER: 1.5,
+  BASE_XP_REWARD: 30,
+  DAILY_MINING_REWARD: 50,
 }
 
 export const gameLogic = {
@@ -27,10 +29,10 @@ export const gameLogic = {
     const miningRateMultiplier = user.boosts.miningRateLevel || 1
     xp = Math.floor(xp * Math.max(miningSpeedMultiplier, miningRateMultiplier) * 0.5)
 
-    // Bonus for 24h continuous mining
+    // Bonus for maximum mining time
     if (miningDuration >= GAME_CONFIG.MAX_MINING_TIME) {
       earned += GAME_CONFIG.DAILY_MINING_REWARD
-      xp += 100 // Bonus XP for 24h mining
+      xp += 100 // Bonus XP for max mining
       type = "bonus"
     }
 
@@ -58,7 +60,6 @@ export const gameLogic = {
 
   getXpForLevel(level: number): number {
     if (level === 1) return 100
-    // Each level requires more XP progressively
     return 100 + (level - 1) * 50
   },
 
@@ -109,7 +110,6 @@ export const gameLogic = {
     }
 
     const baseCost = baseCosts[boostType]
-    // Each level costs more than the previous, starting from level 1
     return Math.floor(baseCost * Math.pow(1.5, Math.max(0, currentLevel - 1)))
   },
 
@@ -119,7 +119,6 @@ export const gameLogic = {
         const nextSpeedMultiplier = Math.pow(GAME_CONFIG.MINING_SPEED_MULTIPLIER, currentLevel)
         return `${nextSpeedMultiplier.toFixed(1)}x`
       case "claimTime":
-        const currentTime = user.minClaimTime || GAME_CONFIG.MIN_CLAIM_TIME
         const nextTime = Math.max(300, GAME_CONFIG.MIN_CLAIM_TIME - (GAME_CONFIG.CLAIM_TIME_REDUCTION * currentLevel))
         return this.formatTime(nextTime)
       case "miningRate":
@@ -146,7 +145,6 @@ export const gameLogic = {
 
   formatNumberPrecise(num: number | undefined | null): string {
     const safeNum = typeof num === "number" && !isNaN(num) ? num : 0
-    // Remove trailing zeros and unnecessary decimal places
     if (safeNum === 0) return "0"
     if (safeNum >= 1) return safeNum.toFixed(3).replace(/\.?0+$/, "")
     return safeNum.toFixed(6).replace(/\.?0+$/, "")

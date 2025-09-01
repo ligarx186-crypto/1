@@ -40,10 +40,7 @@ class SecureAPI {
         }
         $data_check_string = rtrim($data_check_string, "\n");
 
-        // Secret key
         $secret_key = hash('sha256', $botToken, true);
-
-        // Calculate hash
         $hash = hash_hmac('sha256', $data_check_string, $secret_key);
 
         return hash_equals($hash, $check_hash) ? $data : false;
@@ -56,7 +53,7 @@ class SecureAPI {
         
         // Check auth attempts limit
         $clientId = $_SERVER['REMOTE_ADDR'] . '_' . $userId;
-        if (isset($this->authAttempts[$clientId]) && $this->authAttempts[$clientId] >= 3) {
+        if (isset($this->authAttempts[$clientId]) && $this->authAttempts[$clientId] >= 5) {
             return false;
         }
         
@@ -117,8 +114,6 @@ class SecureAPI {
         $refId = $_SERVER['HTTP_X_REF_ID'] ?? '';
         $refAuth = $_SERVER['HTTP_X_REF_AUTH'] ?? '';
         
-        $this->log("$method $path from $ip");
-        
         try {
             switch ($path) {
                 case 'auth':
@@ -126,6 +121,9 @@ class SecureAPI {
                     break;
                 case 'user':
                     $this->handleUser($authKey, $telegramInitData);
+                    break;
+                case 'mining-status':
+                    $this->handleMiningStatus();
                     break;
                 case 'missions':
                     $this->handleMissions();
@@ -197,7 +195,7 @@ class SecureAPI {
         $existingUser = $stmt->fetch();
         
         if ($existingUser) {
-            // Update last active and calculate offline mining
+            // Calculate offline mining rewards
             $now = time() * 1000;
             if ($existingUser['is_mining'] && $existingUser['mining_start_time']) {
                 $offlineDuration = floor(($now - $existingUser['mining_start_time']) / 1000);
@@ -230,58 +228,62 @@ class SecureAPI {
             return;
         }
         
-        // Create new user with game data
-        $authKey = bin2hex(random_bytes(32));
-        $now = time() * 1000;
-        
-        try {
-            $this->db->beginTransaction();
-            
-            $stmt = $this->db->prepare("INSERT INTO users (
-                id, first_name, last_name, avatar_url, auth_key, 
-                referred_by, ref_auth_used, joined_at, last_active, 
-                balance, total_earned, mining_rate, min_claim_time, 
-                mining_speed_level, claim_time_level, mining_rate_level,
-                bonus_claimed, data_initialized
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, FALSE)");
-            
-            $stmt->execute([
-                $userId,
-                $input['firstName'] ?? 'User',
-                $input['lastName'] ?? '',
-                $input['avatarUrl'] ?? '',
-                $authKey,
-                $refId ?? '',
-                $refAuth ?? '',
-                $now,
-                $now,
-                0, // No welcome bonus here - will be claimed in app
-                0,
-                BASE_MINING_RATE,
-                MIN_CLAIM_TIME,
-                1, 1, 1
-            ]);
-            
-            $this->db->commit();
-            
-            // Get created user data
-            $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ?");
-            $stmt->execute([$userId]);
-            $userData = $stmt->fetch();
-            
-            echo json_encode([
-                'success' => true,
-                'authKey' => $authKey,
-                'isNewUser' => true,
-                'userData' => $this->formatUserData($userData)
-            ]);
-            
-        } catch (Exception $e) {
-            $this->db->rollback();
-            $this->log("User creation failed: " . $e->getMessage());
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to create user']);
+        // Only bot can create new users - reject frontend creation attempts
+        http_response_code(403);
+        echo json_encode(['error' => 'User creation not allowed from frontend']);
+    }
+    
+    private function handleMiningStatus() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
         }
+        
+        $userId = $_GET['userId'] ?? '';
+        if (empty($userId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'User ID required']);
+            return;
+        }
+        
+        // Get mining status without auth for performance
+        $stmt = $this->db->prepare("SELECT 
+            is_mining, mining_start_time, pending_rewards, mining_rate, 
+            min_claim_time, last_claim_time 
+            FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['error' => 'User not found']);
+            return;
+        }
+        
+        $now = time() * 1000;
+        $miningDuration = 0;
+        $pendingRewards = 0;
+        $canClaim = false;
+        
+        if ($user['is_mining'] && $user['mining_start_time']) {
+            $miningDuration = floor(($now - $user['mining_start_time']) / 1000);
+            $limitedDuration = min($miningDuration, MAX_MINING_TIME);
+            $pendingRewards = $user['mining_rate'] * $limitedDuration;
+            
+            // Check if can claim (30 min minimum + 5 min between claims)
+            $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
+            $canClaim = $miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= 300;
+        }
+        
+        echo json_encode([
+            'isMining' => (bool)$user['is_mining'],
+            'miningDuration' => $miningDuration,
+            'pendingRewards' => $pendingRewards,
+            'canClaim' => $canClaim,
+            'remainingTime' => max(0, $user['min_claim_time'] - $miningDuration),
+            'claimCooldown' => max(0, 300 - floor(($now - ($user['last_claim_time'] ?: 0)) / 1000))
+        ]);
     }
     
     private function handleUser($authKey, $telegramInitData) {
@@ -334,47 +336,174 @@ class SecureAPI {
                 }
             }
             
-            // Update other user data
-            $stmt = $this->db->prepare("UPDATE users SET 
-                balance = ?, total_earned = ?, is_mining = ?, mining_start_time = ?,
-                last_claim_time = ?, pending_rewards = ?, mining_rate = ?, min_claim_time = ?,
-                mining_speed_level = ?, claim_time_level = ?, mining_rate_level = ?,
-                sound_enabled = ?, vibration_enabled = ?, notifications_enabled = ?,
-                bonus_claimed = ?, data_initialized = ?, xp = ?, level_num = ?,
-                last_active = ?, pubg_id = ?
-                WHERE id = ?");
-            
-            $result = $stmt->execute([
-                $input['balance'] ?? 0,
-                $input['totalEarned'] ?? 0,
-                $input['isMining'] ?? false,
-                $input['miningStartTime'] ?? 0,
-                $input['lastClaimTime'] ?? 0,
-                $input['pendingRewards'] ?? 0,
-                $input['miningRate'] ?? BASE_MINING_RATE,
-                $input['minClaimTime'] ?? MIN_CLAIM_TIME,
-                $input['boosts']['miningSpeedLevel'] ?? 1,
-                $input['boosts']['claimTimeLevel'] ?? 1,
-                $input['boosts']['miningRateLevel'] ?? 1,
-                $input['settings']['sound'] ?? true,
-                $input['settings']['vibration'] ?? true,
-                $input['settings']['notifications'] ?? true,
-                $input['bonusClaimed'] ?? false,
-                $input['dataInitialized'] ?? false,
-                $input['xp'] ?? 0,
-                $input['level'] ?? 1,
-                time() * 1000,
-                $input['pubgId'] ?? '',
-                $userId
-            ]);
-            
-            if ($result) {
-                echo json_encode(['success' => true]);
-            } else {
-                http_response_code(500);
-                echo json_encode(['error' => 'Failed to update user']);
+            // Handle mining operations
+            if (isset($input['startMining']) && $input['startMining']) {
+                $now = time() * 1000;
+                $stmt = $this->db->prepare("UPDATE users SET 
+                    is_mining = TRUE, 
+                    mining_start_time = ?, 
+                    pending_rewards = 0,
+                    last_active = ?
+                    WHERE id = ?");
+                $stmt->execute([$now, $now, $userId]);
             }
+            
+            if (isset($input['claimMining']) && $input['claimMining']) {
+                $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ?");
+                $stmt->execute([$userId]);
+                $user = $stmt->fetch();
+                
+                if ($user && $user['is_mining'] && $user['mining_start_time']) {
+                    $now = time() * 1000;
+                    $miningDuration = floor(($now - $user['mining_start_time']) / 1000);
+                    $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
+                    
+                    // Check if can claim
+                    if ($miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= 300) {
+                        $limitedDuration = min($miningDuration, MAX_MINING_TIME);
+                        $earned = $user['mining_rate'] * $limitedDuration;
+                        $xp = floor($limitedDuration / 60); // 1 XP per minute
+                        
+                        $stmt = $this->db->prepare("UPDATE users SET 
+                            balance = balance + ?, 
+                            total_earned = total_earned + ?,
+                            is_mining = FALSE,
+                            mining_start_time = 0,
+                            pending_rewards = 0,
+                            last_claim_time = ?,
+                            xp = xp + ?,
+                            last_active = ?
+                            WHERE id = ?");
+                        $stmt->execute([$earned, $earned, $now, $xp, $now, $userId]);
+                        
+                        echo json_encode([
+                            'success' => true, 
+                            'earned' => $earned,
+                            'xp' => $xp,
+                            'message' => 'Mining rewards claimed!'
+                        ]);
+                        return;
+                    }
+                }
+                
+                echo json_encode(['success' => false, 'message' => 'Cannot claim yet']);
+                return;
+            }
+            
+            // Handle boost upgrades
+            if (isset($input['upgradeBoost'])) {
+                $boostType = $input['upgradeBoost'];
+                $this->handleBoostUpgrade($userId, $boostType);
+                return;
+            }
+            
+            // Update other user data
+            $updateFields = [];
+            $updateValues = [];
+            
+            if (isset($input['balance'])) {
+                $updateFields[] = 'balance = ?';
+                $updateValues[] = $input['balance'];
+            }
+            if (isset($input['totalEarned'])) {
+                $updateFields[] = 'total_earned = ?';
+                $updateValues[] = $input['totalEarned'];
+            }
+            if (isset($input['settings'])) {
+                $updateFields[] = 'sound_enabled = ?';
+                $updateValues[] = $input['settings']['sound'] ?? true;
+                $updateFields[] = 'vibration_enabled = ?';
+                $updateValues[] = $input['settings']['vibration'] ?? true;
+                $updateFields[] = 'notifications_enabled = ?';
+                $updateValues[] = $input['settings']['notifications'] ?? true;
+            }
+            if (isset($input['pubgId'])) {
+                $updateFields[] = 'pubg_id = ?';
+                $updateValues[] = $input['pubgId'];
+            }
+            
+            if (!empty($updateFields)) {
+                $updateFields[] = 'last_active = ?';
+                $updateValues[] = time() * 1000;
+                $updateValues[] = $userId;
+                
+                $sql = "UPDATE users SET " . implode(', ', $updateFields) . " WHERE id = ?";
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute($updateValues);
+            }
+            
+            echo json_encode(['success' => true]);
         }
+    }
+    
+    private function handleBoostUpgrade($userId, $boostType) {
+        $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            echo json_encode(['success' => false, 'message' => 'User not found']);
+            return;
+        }
+        
+        $levelField = '';
+        $baseCost = 0;
+        
+        switch ($boostType) {
+            case 'miningSpeed':
+                $levelField = 'mining_speed_level';
+                $baseCost = 100;
+                break;
+            case 'claimTime':
+                $levelField = 'claim_time_level';
+                $baseCost = 150;
+                break;
+            case 'miningRate':
+                $levelField = 'mining_rate_level';
+                $baseCost = 200;
+                break;
+            default:
+                echo json_encode(['success' => false, 'message' => 'Invalid boost type']);
+                return;
+        }
+        
+        $currentLevel = $user[$levelField];
+        $cost = floor($baseCost * pow(1.5, max(0, $currentLevel - 1)));
+        
+        if ($user['balance'] < $cost) {
+            echo json_encode(['success' => false, 'message' => 'Insufficient balance']);
+            return;
+        }
+        
+        // Calculate new values
+        $newLevel = $currentLevel + 1;
+        $newBalance = $user['balance'] - $cost;
+        
+        // Update mining rate and claim time based on all boosts
+        $miningSpeedLevel = $boostType === 'miningSpeed' ? $newLevel : $user['mining_speed_level'];
+        $claimTimeLevel = $boostType === 'claimTime' ? $newLevel : $user['claim_time_level'];
+        $miningRateLevel = $boostType === 'miningRate' ? $newLevel : $user['mining_rate_level'];
+        
+        $miningRateMultiplier = pow(1.5, ($miningRateLevel - 1));
+        $miningSpeedMultiplier = pow(1.2, ($miningSpeedLevel - 1));
+        $newMiningRate = BASE_MINING_RATE * $miningRateMultiplier * $miningSpeedMultiplier;
+        $newClaimTime = max(300, MIN_CLAIM_TIME - (CLAIM_TIME_REDUCTION * ($claimTimeLevel - 1)));
+        
+        $stmt = $this->db->prepare("UPDATE users SET 
+            balance = ?, 
+            $levelField = ?,
+            mining_rate = ?,
+            min_claim_time = ?,
+            last_active = ?
+            WHERE id = ?");
+        $stmt->execute([$newBalance, $newLevel, $newMiningRate, $newClaimTime, time() * 1000, $userId]);
+        
+        echo json_encode([
+            'success' => true, 
+            'message' => ucfirst($boostType) . ' upgraded!',
+            'newLevel' => $newLevel,
+            'cost' => $cost
+        ]);
     }
     
     private function processReferralBonus($referrerId, $referredId, $refAuth) {
@@ -456,6 +585,299 @@ class SecureAPI {
         echo json_encode($result);
     }
     
+    private function handleUserMissions($authKey, $telegramInitData) {
+        $userId = $_GET['userId'] ?? '';
+        
+        if (!$this->validateUser($userId, $authKey, $telegramInitData)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            $stmt = $this->db->prepare("SELECT * FROM user_missions WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            $userMissions = $stmt->fetchAll();
+            
+            $result = [];
+            foreach ($userMissions as $mission) {
+                $result[$mission['mission_id']] = [
+                    'started' => (bool)$mission['started'],
+                    'completed' => (bool)$mission['completed'],
+                    'claimed' => (bool)$mission['claimed'],
+                    'currentCount' => (int)$mission['current_count'],
+                    'startedDate' => $mission['started_date'],
+                    'completedAt' => $mission['completed_at'],
+                    'claimedAt' => $mission['claimed_at'],
+                    'lastVerifyAttempt' => $mission['last_verify_attempt'],
+                    'timerStarted' => $mission['timer_started'],
+                    'codeSubmitted' => $mission['code_submitted']
+                ];
+            }
+            
+            echo json_encode($result);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $missionId = $input['missionId'] ?? '';
+            $missionData = $input['missionData'] ?? [];
+            
+            if (empty($missionId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Mission ID required']);
+                return;
+            }
+            
+            // Insert or update user mission
+            $stmt = $this->db->prepare("INSERT INTO user_missions (
+                user_id, mission_id, started, completed, claimed, current_count,
+                started_date, completed_at, claimed_at, last_verify_attempt,
+                timer_started, code_submitted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                started = VALUES(started),
+                completed = VALUES(completed),
+                claimed = VALUES(claimed),
+                current_count = VALUES(current_count),
+                completed_at = VALUES(completed_at),
+                claimed_at = VALUES(claimed_at),
+                last_verify_attempt = VALUES(last_verify_attempt),
+                timer_started = VALUES(timer_started),
+                code_submitted = VALUES(code_submitted)");
+            
+            $result = $stmt->execute([
+                $userId,
+                $missionId,
+                $missionData['started'] ?? false,
+                $missionData['completed'] ?? false,
+                $missionData['claimed'] ?? false,
+                $missionData['currentCount'] ?? 0,
+                $missionData['startedDate'] ?? null,
+                $missionData['completedAt'] ?? null,
+                $missionData['claimedAt'] ?? null,
+                $missionData['lastVerifyAttempt'] ?? null,
+                $missionData['timerStarted'] ?? null,
+                $missionData['codeSubmitted'] ?? null
+            ]);
+            
+            echo json_encode(['success' => $result]);
+        }
+    }
+    
+    private function handleReferrals($authKey, $telegramInitData) {
+        $userId = $_GET['userId'] ?? '';
+        
+        if (!$this->validateUser($userId, $authKey, $telegramInitData)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+        
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+        
+        $stmt = $this->db->prepare("
+            SELECT r.*, u.first_name, u.last_name, u.avatar_url, u.joined_at
+            FROM referrals r 
+            JOIN users u ON r.referred_id = u.id 
+            WHERE r.referrer_id = ? 
+            ORDER BY r.created_at DESC
+        ");
+        $stmt->execute([$userId]);
+        $referrals = $stmt->fetchAll();
+        
+        $result = [
+            'count' => count($referrals),
+            'totalUC' => array_sum(array_column($referrals, 'earned')),
+            'referrals' => []
+        ];
+        
+        foreach ($referrals as $referral) {
+            $result['referrals'][$referral['referred_id']] = [
+                'date' => $referral['created_at'],
+                'earned' => (int)$referral['earned'],
+                'firstName' => $referral['first_name'],
+                'lastName' => $referral['last_name'] ?? '',
+                'avatarUrl' => $referral['avatar_url'] ?? ''
+            ];
+        }
+        
+        echo json_encode($result);
+    }
+    
+    private function handleConversions($authKey, $telegramInitData) {
+        $userId = $_GET['userId'] ?? '';
+        
+        if (!$this->validateUser($userId, $authKey, $telegramInitData)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            $stmt = $this->db->prepare("SELECT * FROM conversions WHERE user_id = ? ORDER BY requested_at DESC");
+            $stmt->execute([$userId]);
+            $conversions = $stmt->fetchAll();
+            
+            $result = [];
+            foreach ($conversions as $conv) {
+                $result[] = [
+                    'id' => $conv['id'],
+                    'fromCurrency' => $conv['from_currency'],
+                    'toCurrency' => $conv['to_currency'],
+                    'amount' => (float)$conv['amount'],
+                    'convertedAmount' => (float)$conv['converted_amount'],
+                    'category' => $conv['category'],
+                    'packageType' => $conv['package_type'],
+                    'packageImage' => $conv['package_image'],
+                    'status' => $conv['status'],
+                    'requestedAt' => (int)$conv['requested_at'],
+                    'completedAt' => $conv['completed_at'] ? (int)$conv['completed_at'] : null,
+                    'requiredInfo' => $conv['required_info'] ? json_decode($conv['required_info'], true) : []
+                ];
+            }
+            
+            echo json_encode($result);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            
+            $conversionId = uniqid('conv_', true);
+            $now = time() * 1000;
+            
+            $stmt = $this->db->prepare("INSERT INTO conversions (
+                id, user_id, from_currency, to_currency, amount, converted_amount,
+                category, package_type, package_image, required_info, status, requested_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)");
+            
+            $result = $stmt->execute([
+                $conversionId,
+                $userId,
+                $input['fromCurrency'],
+                $input['toCurrency'],
+                $input['amount'],
+                $input['convertedAmount'],
+                $input['category'],
+                $input['packageType'],
+                $input['packageImage'] ?? null,
+                json_encode($input['requiredInfo'] ?? []),
+                $now
+            ]);
+            
+            if ($result) {
+                // Deduct DRX from user balance
+                $stmt = $this->db->prepare("UPDATE users SET balance = balance - ? WHERE id = ?");
+                $stmt->execute([$input['amount'], $userId]);
+                
+                echo json_encode(['success' => true, 'conversionId' => $conversionId]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Failed to create conversion']);
+            }
+        }
+    }
+    
+    private function handleConfig() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+        
+        $stmt = $this->db->prepare("SELECT setting_key, setting_value FROM config");
+        $stmt->execute();
+        $config = $stmt->fetchAll();
+        
+        $result = [];
+        foreach ($config as $item) {
+            $result[$item['setting_key']] = $item['setting_value'];
+        }
+        
+        echo json_encode($result);
+    }
+    
+    private function handleWalletCategories() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+        
+        $stmt = $this->db->prepare("SELECT * FROM wallet_categories WHERE active = TRUE ORDER BY priority ASC");
+        $stmt->execute();
+        $categories = $stmt->fetchAll();
+        
+        $result = [];
+        foreach ($categories as $category) {
+            $packages = json_decode($category['packages'], true) ?: [];
+            $requiredFields = json_decode($category['required_fields'], true) ?: [];
+            
+            $result[] = [
+                'id' => $category['id'],
+                'name' => $category['name'],
+                'description' => $category['description'],
+                'image' => $category['image'],
+                'active' => (bool)$category['active'],
+                'conversionRate' => (float)$category['conversion_rate'],
+                'minConversion' => (int)$category['min_conversion'],
+                'maxConversion' => (int)$category['max_conversion'],
+                'processingTime' => $category['processing_time'],
+                'instructions' => $category['instructions'],
+                'packages' => $packages,
+                'requiredFields' => $requiredFields
+            ];
+        }
+        
+        echo json_encode($result);
+    }
+    
+    private function handleLeaderboard() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            return;
+        }
+        
+        $type = $_GET['type'] ?? 'balance';
+        
+        if ($type === 'balance') {
+            $stmt = $this->db->prepare("SELECT id, first_name, last_name, avatar_url, total_earned, xp FROM users WHERE status = 'active' ORDER BY total_earned DESC LIMIT 100");
+        } else {
+            $stmt = $this->db->prepare("SELECT id, first_name, last_name, avatar_url, total_earned, xp FROM users WHERE status = 'active' ORDER BY xp DESC LIMIT 100");
+        }
+        
+        $stmt->execute();
+        $users = $stmt->fetchAll();
+        
+        $result = [];
+        foreach ($users as $user) {
+            $result[] = [
+                'id' => $user['id'],
+                'firstName' => $user['first_name'],
+                'lastName' => $user['last_name'] ?? '',
+                'avatarUrl' => $user['avatar_url'] ?? '',
+                'totalEarned' => (float)$user['total_earned'],
+                'xp' => (int)$user['xp']
+            ];
+        }
+        
+        echo json_encode($result);
+    }
+    
+    private function handleTelegramVerification($authKey, $telegramInitData) {
+        $userId = $_GET['userId'] ?? '';
+        $channelId = $_GET['channelId'] ?? '';
+        
+        if (!$this->validateUser($userId, $authKey, $telegramInitData)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            return;
+        }
+        
+        // For now, return verified=true as Telegram API verification requires bot admin
+        echo json_encode(['verified' => true]);
+    }
+    
     private function handlePromoCodeSubmission($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
@@ -528,43 +950,6 @@ class SecureAPI {
             echo json_encode(['error' => 'Failed to process promo code']);
         }
     }
-    
-    private function handleWalletCategories() {
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
-            return;
-        }
-        
-        $stmt = $this->db->prepare("SELECT * FROM wallet_categories WHERE active = TRUE ORDER BY priority ASC");
-        $stmt->execute();
-        $categories = $stmt->fetchAll();
-        
-        $result = [];
-        foreach ($categories as $category) {
-            $packages = json_decode($category['packages'], true) ?: [];
-            $requiredFields = json_decode($category['required_fields'], true) ?: [];
-            
-            $result[] = [
-                'id' => $category['id'],
-                'name' => $category['name'],
-                'description' => $category['description'],
-                'image' => $category['image'],
-                'active' => (bool)$category['active'],
-                'conversionRate' => (float)$category['conversion_rate'],
-                'minConversion' => (int)$category['min_conversion'],
-                'maxConversion' => (int)$category['max_conversion'],
-                'processingTime' => $category['processing_time'],
-                'instructions' => $category['instructions'],
-                'packages' => $packages,
-                'requiredFields' => $requiredFields
-            ];
-        }
-        
-        echo json_encode($result);
-    }
-    
-    // ... (other methods remain similar with proper validation)
     
     private function formatUserData($userData) {
         return [

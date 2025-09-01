@@ -19,6 +19,7 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
   const [canClaim, setCanClaim] = useState(false)
   const [currentRewards, setCurrentRewards] = useState(0)
   const [bannerUrl, setBannerUrl] = useState("https://mining-master.onrender.com//assets/banner-BH8QO14f.png")
+  const [miningStatus, setMiningStatus] = useState<any>(null)
 
   // Load banner URL from Firebase
   useEffect(() => {
@@ -34,33 +35,40 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
     }
   }
 
-  // Update timer and rewards
+  // Update timer and rewards with optimized API calls
   useEffect(() => {
     let interval: NodeJS.Timeout
 
-    if (user.isMining) {
+    const updateMiningStatus = async () => {
+      try {
+        const status = await apiService.getMiningStatus(user.id)
+        setMiningStatus(status)
+        setCanClaim(status.canClaim)
+        setTimeLeft(status.remainingTime)
+        setClaimTimeLeft(status.claimCooldown)
+        setCurrentRewards(status.pendingRewards)
+      } catch (error) {
+        console.error("Failed to get mining status:", error)
+      }
+    }
+
+    if (user.isMining && user.id) {
+      // Initial load
+      updateMiningStatus()
+      
+      // Update every 5 seconds instead of every second for performance
       interval = setInterval(() => {
-        const duration = gameLogic.getMiningDuration(user)
-        const minTime = user.minClaimTime || 1800 // 30 minutes default
-        const remaining = gameLogic.getRemainingClaimTime(user)
-        const claimInterval = 300 // 5 minutes between claims
-        const timeSinceLastClaim = Math.floor((Date.now() - (user.lastClaimTime || 0)) / 1000)
-        const claimRemaining = Math.max(0, claimInterval - timeSinceLastClaim)
-        
-        if (remaining <= 0 && claimRemaining <= 0) {
-          setCanClaim(true)
-          setTimeLeft(0)
-          setClaimTimeLeft(0)
-          const rewards = gameLogic.calculatePendingRewards(user)
-          setCurrentRewards(rewards)
-        } else {
-          setCanClaim(false)
-          setTimeLeft(remaining)
-          setClaimTimeLeft(claimRemaining)
-          const rewards = gameLogic.calculatePendingRewards(user)
-          setCurrentRewards(rewards)
+        if (miningStatus) {
+          // Update local timers
+          setTimeLeft(prev => Math.max(0, prev - 5))
+          setClaimTimeLeft(prev => Math.max(0, prev - 5))
+          
+          // Refresh from server every 30 seconds
+          if (Date.now() % 30000 < 5000) {
+            updateMiningStatus()
+          }
         }
-      }, 1000)
+      }, 5000)
     } else {
       setCanClaim(false)
       setTimeLeft(0)
@@ -70,7 +78,7 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [user.isMining, user.miningStartTime, user.minClaimTime])
+  }, [user.isMining, user.id, miningStatus])
 
   const handleStartMining = () => {
     const result = onStartMining()
@@ -78,7 +86,7 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
 
   const handleClaimRewards = () => {
     const result = onClaimRewards()
-    setCurrentRewards(0) // Reset rewards after claiming
+    setCurrentRewards(0)
   }
 
   const formatTime = (seconds: number) => {
