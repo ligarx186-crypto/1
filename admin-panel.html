@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRX Mining Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #10b981, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="w-full max-w-md mx-4 glass rounded-2xl p-8 shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="w-20 h-20 mx-auto bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-3xl mb-4 animate-float">
+                    🔐
+                </div>
+                <h1 class="text-2xl font-bold gradient-text mb-2">Admin Panel</h1>
+                <p class="text-gray-400">DRX Mining Management</p>
+            </div>
+            
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                    <input type="email" id="email" required 
+                           class="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-green-500 transition-colors">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                    <input type="password" id="password" required 
+                           class="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-green-500 transition-colors">
+                </div>
+                
+                <button type="submit" 
+                        class="w-full bg-gradient-to-r from-green-400 to-blue-500 hover:from-green-500 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-xl transition-all duration-200 hover:scale-105 shadow-lg">
+                    Login
+                </button>
+            </form>
+            
+            <div id="loginError" class="hidden mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-400 text-sm"></div>
+        </div>
+    </div>
+
+    <!-- Main Panel -->
+    <div id="mainPanel" class="hidden min-h-screen p-4">
+        <!-- Header -->
+        <header class="glass rounded-2xl p-6 mb-6 shadow-xl">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-2xl animate-float">
+                        ⛏️
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold gradient-text">DRX Mining Admin</h1>
+                        <p class="text-gray-400">Comprehensive Management Panel</p>
+                    </div>
+                </div>
+                <button onclick="logout()" 
+                        class="bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl transition-all duration-200">
+                    Logout
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="glass rounded-2xl p-4 mb-6 shadow-xl">
+            <div class="flex flex-wrap gap-2">
+                <button onclick="showSection('dashboard')" class="nav-btn bg-gradient-to-r from-green-400 to-blue-500 text-white px-4 py-2 rounded-xl font-semibold">
+                    📊 Dashboard
+                </button>
+                <button onclick="showSection('users')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    👥 Users
+                </button>
+                <button onclick="showSection('missions')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    🎯 Missions
+                </button>
+                <button onclick="showSection('conversions')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    💰 Conversions
+                </button>
+                <button onclick="showSection('promo-codes')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    🔐 Promo Codes
+                </button>
+                <button onclick="showSection('categories')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    📦 Categories
+                </button>
+                <button onclick="showSection('config')" class="nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold">
+                    ⚙️ Config
+                </button>
+            </div>
+        </nav>
+
+        <!-- Dashboard Section -->
+        <div id="dashboard" class="section">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-xl flex items-center justify-center text-xl">
+                            👥
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-white" id="totalUsers">0</div>
+                            <div class="text-sm text-gray-400">Total Users</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 rounded-xl flex items-center justify-center text-xl">
+                            📈
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-white" id="activeToday">0</div>
+                            <div class="text-sm text-gray-400">Active Today</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center text-xl">
+                            💰
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-white" id="totalConversions">0</div>
+                            <div class="text-sm text-gray-400">Conversions</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-500 rounded-xl flex items-center justify-center text-xl">
+                            ⛏️
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-white" id="activeMining">0</div>
+                            <div class="text-sm text-gray-400">Mining Now</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-lg font-bold text-white mb-4">User Activity</h3>
+                    <canvas id="userChart" width="400" height="200"></canvas>
+                </div>
+                
+                <div class="glass rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-lg font-bold text-white mb-4">Conversion Status</h3>
+                    <canvas id="conversionChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Section -->
+        <div id="users" class="section hidden">
+            <div class="glass rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-white">User Management</h2>
+                    <div class="flex gap-3">
+                        <input type="text" id="userSearch" placeholder="Search users..." 
+                               class="px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-green-500">
+                        <button onclick="searchUsers()" 
+                                class="bg-gradient-to-r from-green-400 to-blue-500 text-white px-4 py-2 rounded-xl font-semibold">
+                            Search
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-700">
+                                <th class="text-left py-3 px-4 text-gray-300">ID</th>
+                                <th class="text-left py-3 px-4 text-gray-300">Name</th>
+                                <th class="text-left py-3 px-4 text-gray-300">Balance</th>
+                                <th class="text-left py-3 px-4 text-gray-300">Level</th>
+                                <th class="text-left py-3 px-4 text-gray-300">Status</th>
+                                <th class="text-left py-3 px-4 text-gray-300">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <!-- Users will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div id="usersPagination" class="flex justify-center mt-6">
+                    <!-- Pagination will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Missions Section -->
+        <div id="missions" class="section hidden">
+            <div class="glass rounded-2xl p-6 shadow-xl mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-white">Mission Management</h2>
+                    <button onclick="showCreateMissionModal()" 
+                            class="bg-gradient-to-r from-green-400 to-blue-500 text-white px-4 py-2 rounded-xl font-semibold">
+                        ➕ Create Mission
+                    </button>
+                </div>
+                
+                <div id="missionsList" class="space-y-4">
+                    <!-- Missions will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Promo Codes Section -->
+        <div id="promo-codes" class="section hidden">
+            <div class="glass rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-white">Promo Code Management</h2>
+                    <button onclick="showCreatePromoModal()" 
+                            class="bg-gradient-to-r from-purple-400 to-pink-500 text-white px-4 py-2 rounded-xl font-semibold">
+                        ➕ Create Promo Codes
+                    </button>
+                </div>
+                
+                <div id="promoCodesList" class="space-y-4">
+                    <!-- Promo codes will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Other sections... -->
+    </div>
+
+    <!-- Modals -->
+    <div id="createMissionModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="w-full max-w-2xl mx-4 glass rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-white">Create Mission</h3>
+                <button onclick="hideCreateMissionModal()" class="text-gray-400 hover:text-white">✕</button>
+            </div>
+            
+            <form id="missionForm" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Title</label>
+                        <input type="text" name="title" required 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Category</label>
+                        <input type="text" name="category" required 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Type</label>
+                    <select name="type" required onchange="toggleMissionFields()" 
+                            class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                        <option value="">Select Type</option>
+                        <option value="join_channel">Join Channel</option>
+                        <option value="join_group">Join Group</option>
+                        <option value="url_timer">URL Timer</option>
+                        <option value="promo_code">Promo Code</option>
+                        <option value="multi_promo_code">Multi Promo Code</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Description</label>
+                    <textarea name="description" required rows="3" 
+                              class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white"></textarea>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Reward (DRX)</label>
+                        <input type="number" name="reward" required min="1" 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Priority</label>
+                        <input type="number" name="priority" value="999" 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                </div>
+                
+                <!-- Dynamic fields based on mission type -->
+                <div id="channelField" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Channel ID</label>
+                    <input type="text" name="channelId" 
+                           class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                </div>
+                
+                <div id="urlField" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">URL</label>
+                    <input type="url" name="url" 
+                           class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                </div>
+                
+                <div id="codeField" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Promo Code</label>
+                    <input type="text" name="code" 
+                           class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                </div>
+                
+                <div id="timeField" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Required Time (seconds)</label>
+                    <input type="number" name="requiredTime" min="1" 
+                           class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Icon URL</label>
+                        <input type="url" name="icon" 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Image URL</label>
+                        <input type="url" name="img" 
+                               class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                    </div>
+                </div>
+                
+                <div class="flex gap-4">
+                    <button type="submit" 
+                            class="flex-1 bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-3 px-6 rounded-xl">
+                        Create Mission
+                    </button>
+                    <button type="button" onclick="hideCreateMissionModal()" 
+                            class="bg-gray-700/50 text-gray-300 px-6 py-3 rounded-xl">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentAdmin = null;
+        let currentSection = 'dashboard';
+        
+        // API Configuration
+        const API_BASE = '/backend/panelApi.php';
+        
+        // Authentication
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}?path=login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentAdmin = { email, password };
+                    document.getElementById('loginModal').classList.add('hidden');
+                    document.getElementById('mainPanel').classList.remove('hidden');
+                    loadDashboard();
+                } else {
+                    showError('Invalid credentials');
+                }
+            } catch (error) {
+                showError('Login failed: ' + error.message);
+            }
+        });
+        
+        function logout() {
+            currentAdmin = null;
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('mainPanel').classList.add('hidden');
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+        
+        // API Helper
+        async function apiRequest(endpoint, options = {}) {
+            if (!currentAdmin) throw new Error('Not authenticated');
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Admin-Email': currentAdmin.email,
+                'X-Admin-Password': currentAdmin.password,
+                ...options.headers
+            };
+            
+            const response = await fetch(`${API_BASE}?path=${endpoint}`, {
+                ...options,
+                headers
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            return await response.json();
+        }
+        
+        // Navigation
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            
+            // Update nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.className = 'nav-btn bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 px-4 py-2 rounded-xl font-semibold';
+            });
+            
+            // Show selected section
+            document.getElementById(section).classList.remove('hidden');
+            event.target.className = 'nav-btn bg-gradient-to-r from-green-400 to-blue-500 text-white px-4 py-2 rounded-xl font-semibold';
+            
+            currentSection = section;
+            
+            // Load section data
+            switch(section) {
+                case 'dashboard':
+                    loadDashboard();
+                    break;
+                case 'users':
+                    loadUsers();
+                    break;
+                case 'missions':
+                    loadMissions();
+                    break;
+                case 'conversions':
+                    loadConversions();
+                    break;
+                case 'promo-codes':
+                    loadPromoCodes();
+                    break;
+                case 'categories':
+                    loadCategories();
+                    break;
+                case 'config':
+                    loadConfig();
+                    break;
+            }
+        }
+        
+        // Dashboard
+        async function loadDashboard() {
+            try {
+                const stats = await apiRequest('stats');
+                
+                document.getElementById('totalUsers').textContent = stats.users.total;
+                document.getElementById('activeToday').textContent = stats.users.activeToday;
+                document.getElementById('totalConversions').textContent = stats.conversions.total;
+                document.getElementById('activeMining').textContent = stats.mining.activeMining;
+                
+                // Create charts
+                createUserChart(stats.users);
+                createConversionChart(stats.conversions);
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+            }
+        }
+        
+        function createUserChart(userData) {
+            const ctx = document.getElementById('userChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Total', 'Today', 'Week', 'Month'],
+                    datasets: [{
+                        label: 'Users',
+                        data: [userData.total, userData.activeToday, userData.activeWeek, userData.activeMonth],
+                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+        
+        function createConversionChart(conversionData) {
+            const ctx = document.getElementById('conversionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Pending', 'Approved', 'Rejected'],
+                    datasets: [{
+                        data: [conversionData.pending, conversionData.approved, conversionData.rejected],
+                        backgroundColor: ['#f59e0b', '#10b981', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+        
+        // Users Management
+        async function loadUsers(page = 1, search = '') {
+            try {
+                const users = await apiRequest(`users&page=${page}&search=${encodeURIComponent(search)}`);
+                
+                const tbody = document.getElementById('usersTable');
+                tbody.innerHTML = '';
+                
+                users.users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-700/50 hover:bg-gray-800/30';
+                    row.innerHTML = `
+                        <td class="py-3 px-4 text-sm">${user.id}</td>
+                        <td class="py-3 px-4 text-sm">${user.first_name} ${user.last_name}</td>
+                        <td class="py-3 px-4 text-sm">${parseFloat(user.balance).toFixed(3)} DRX</td>
+                        <td class="py-3 px-4 text-sm">Level ${user.level_num}</td>
+                        <td class="py-3 px-4 text-sm">
+                            <span class="px-2 py-1 rounded-lg text-xs font-semibold ${
+                                user.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }">${user.status}</span>
+                        </td>
+                        <td class="py-3 px-4 text-sm">
+                            <button onclick="editUser('${user.id}')" 
+                                    class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-lg text-xs hover:bg-blue-500/40">
+                                Edit
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                // Update pagination
+                updatePagination('usersPagination', users.pagination, (page) => loadUsers(page, search));
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        }
+        
+        function searchUsers() {
+            const search = document.getElementById('userSearch').value;
+            loadUsers(1, search);
+        }
+        
+        // Mission Management
+        async function loadMissions() {
+            try {
+                const missions = await apiRequest('missions');
+                
+                const container = document.getElementById('missionsList');
+                container.innerHTML = '';
+                
+                missions.forEach(mission => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-gray-800/30 rounded-xl p-4 border border-gray-700/30';
+                    div.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                ${mission.icon ? `<img src="${mission.icon}" class="w-10 h-10 rounded-lg">` : '<div class="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-lg flex items-center justify-center text-xl">🎯</div>'}
+                                <div>
+                                    <h4 class="text-white font-bold">${mission.title}</h4>
+                                    <p class="text-gray-400 text-sm">${mission.description}</p>
+                                    <div class="flex gap-2 mt-2">
+                                        <span class="px-2 py-1 bg-green-500/20 text-green-400 rounded-lg text-xs">${mission.reward} DRX</span>
+                                        <span class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-xs">${mission.type}</span>
+                                        <span class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-lg text-xs">${mission.category}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="editMission('${mission.id}')" 
+                                        class="bg-blue-500/20 text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-500/40">
+                                    Edit
+                                </button>
+                                <button onclick="deleteMission('${mission.id}')" 
+                                        class="bg-red-500/20 text-red-400 px-3 py-2 rounded-lg hover:bg-red-500/40">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Failed to load missions:', error);
+            }
+        }
+        
+        function showCreateMissionModal() {
+            document.getElementById('createMissionModal').classList.remove('hidden');
+        }
+        
+        function hideCreateMissionModal() {
+            document.getElementById('createMissionModal').classList.add('hidden');
+            document.getElementById('missionForm').reset();
+        }
+        
+        function toggleMissionFields() {
+            const type = document.querySelector('select[name="type"]').value;
+            
+            // Hide all fields
+            document.getElementById('channelField').classList.add('hidden');
+            document.getElementById('urlField').classList.add('hidden');
+            document.getElementById('codeField').classList.add('hidden');
+            document.getElementById('timeField').classList.add('hidden');
+            
+            // Show relevant fields
+            switch(type) {
+                case 'join_channel':
+                case 'join_group':
+                    document.getElementById('channelField').classList.remove('hidden');
+                    break;
+                case 'url_timer':
+                    document.getElementById('urlField').classList.remove('hidden');
+                    document.getElementById('timeField').classList.remove('hidden');
+                    break;
+                case 'promo_code':
+                    document.getElementById('urlField').classList.remove('hidden');
+                    document.getElementById('codeField').classList.remove('hidden');
+                    break;
+                case 'multi_promo_code':
+                    document.getElementById('urlField').classList.remove('hidden');
+                    break;
+            }
+        }
+        
+        // Promo Codes Management
+        async function loadPromoCodes() {
+            try {
+                const promoCodes = await apiRequest('promo-codes');
+                
+                const container = document.getElementById('promoCodesList');
+                container.innerHTML = '';
+                
+                promoCodes.forEach(code => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-gray-800/30 rounded-xl p-4 border border-gray-700/30';
+                    div.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="text-white font-bold font-mono">${code.code}</h4>
+                                <p class="text-gray-400 text-sm">${code.description}</p>
+                                <div class="flex gap-2 mt-2">
+                                    <span class="px-2 py-1 bg-green-500/20 text-green-400 rounded-lg text-xs">${code.reward} DRX</span>
+                                    <span class="px-2 py-1 ${code.used_by ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'} rounded-lg text-xs">
+                                        ${code.used_by ? `Used by ${code.used_by_name || code.used_by}` : 'Available'}
+                                    </span>
+                                    ${code.expires_at ? `<span class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded-lg text-xs">Expires: ${new Date(code.expires_at).toLocaleDateString()}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="deletePromoCode('${code.id}')" 
+                                        class="bg-red-500/20 text-red-400 px-3 py-2 rounded-lg hover:bg-red-500/40">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Failed to load promo codes:', error);
+            }
+        }
+        
+        function showCreatePromoModal() {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm';
+            modal.innerHTML = `
+                <div class="w-full max-w-md mx-4 glass rounded-2xl p-6 shadow-2xl">
+                    <h3 class="text-xl font-bold text-white mb-6">Create Promo Codes</h3>
+                    <form id="promoForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Codes (one per line)</label>
+                            <textarea name="codes" required rows="5" placeholder="CODE1\nCODE2\nCODE3" 
+                                      class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white font-mono"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Reward (DRX)</label>
+                            <input type="number" name="reward" required min="1" 
+                                   class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Description</label>
+                            <input type="text" name="description" 
+                                   class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Expires At (optional)</label>
+                            <input type="datetime-local" name="expiresAt" 
+                                   class="w-full px-4 py-2 bg-gray-800/50 border border-gray-600 rounded-xl text-white">
+                        </div>
+                        
+                        <div class="flex gap-4">
+                            <button type="submit" 
+                                    class="flex-1 bg-gradient-to-r from-purple-400 to-pink-500 text-white font-bold py-3 px-6 rounded-xl">
+                                Create Codes
+                            </button>
+                            <button type="button" onclick="this.closest('.fixed').remove()" 
+                                    class="bg-gray-700/50 text-gray-300 px-6 py-3 rounded-xl">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            document.getElementById('promoForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const codes = formData.get('codes').split('\n').filter(c => c.trim());
+                
+                try {
+                    await apiRequest('promo-codes', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            codes,
+                            reward: parseInt(formData.get('reward')),
+                            description: formData.get('description'),
+                            expiresAt: formData.get('expiresAt') || null
+                        })
+                    });
+                    
+                    modal.remove();
+                    loadPromoCodes();
+                    alert('Promo codes created successfully!');
+                } catch (error) {
+                    alert('Failed to create promo codes: ' + error.message);
+                }
+            });
+        }
+        
+        async function deletePromoCode(codeId) {
+            if (!confirm('Are you sure you want to delete this promo code?')) return;
+            
+            try {
+                await apiRequest(`promo-codes&codeId=${codeId}`, { method: 'DELETE' });
+                loadPromoCodes();
+                alert('Promo code deleted successfully!');
+            } catch (error) {
+                alert('Failed to delete promo code: ' + error.message);
+            }
+        }
+        
+        // Mission Form Handler
+        document.getElementById('missionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            const missionData = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                category: formData.get('category'),
+                type: formData.get('type'),
+                reward: parseInt(formData.get('reward')),
+                priority: parseInt(formData.get('priority')),
+                channelId: formData.get('channelId'),
+                url: formData.get('url'),
+                code: formData.get('code'),
+                requiredTime: formData.get('requiredTime') ? parseInt(formData.get('requiredTime')) : null,
+                icon: formData.get('icon'),
+                img: formData.get('img')
+            };
+            
+            try {
+                await apiRequest('missions', {
+                    method: 'POST',
+                    body: JSON.stringify(missionData)
+                });
+                
+                hideCreateMissionModal();
+                loadMissions();
+                alert('Mission created successfully!');
+            } catch (error) {
+                alert('Failed to create mission: ' + error.message);
+            }
+        });
+        
+        function updatePagination(containerId, pagination, loadFunction) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            if (pagination.pages <= 1) return;
+            
+            for (let i = 1; i <= pagination.pages; i++) {
+                const button = document.createElement('button');
+                button.textContent = i;
+                button.className = `px-3 py-2 mx-1 rounded-lg ${
+                    i === pagination.page 
+                        ? 'bg-gradient-to-r from-green-400 to-blue-500 text-white' 
+                        : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                }`;
+                button.onclick = () => loadFunction(i);
+                container.appendChild(button);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Auto-fill login for development
+            document.getElementById('email').value = 'admin-davronov@gmail.com';
+            document.getElementById('password').value = 'Davronov-07';
+        });
+    </script>
+</body>
+</html>
