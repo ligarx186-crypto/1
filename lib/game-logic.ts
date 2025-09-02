@@ -6,7 +6,7 @@ export const GAME_CONFIG = {
   BASE_MINING_RATE: 0.001,
   WELCOME_BONUS: 100,
   MIN_CLAIM_TIME: 1800, // 30 minutes
-  MAX_MINING_TIME: 2340, // 39 minutes
+  MAX_MINING_TIME: 1800, // 30 minutes (not 39)
   MIN_CLAIM_INTERVAL: 300, // 5 minutes between claims
   MINING_SPEED_MULTIPLIER: 1.2,
   CLAIM_TIME_REDUCTION: 60,
@@ -29,7 +29,7 @@ export const gameLogic = {
     const miningRateMultiplier = user.boosts.miningRateLevel || 1
     xp = Math.floor(xp * Math.max(miningSpeedMultiplier, miningRateMultiplier) * 0.5)
 
-    // Bonus for maximum mining time
+    // Bonus for maximum mining time (30 minutes)
     if (miningDuration >= GAME_CONFIG.MAX_MINING_TIME) {
       earned += GAME_CONFIG.DAILY_MINING_REWARD
       xp += 100 // Bonus XP for max mining
@@ -185,7 +185,7 @@ export const gameLogic = {
     const duration = this.getMiningDuration(user)
     if (duration === 0) return 0
     
-    // Apply mining time limits
+    // Apply mining time limits (30 minutes max)
     const limitedDuration = Math.min(duration, GAME_CONFIG.MAX_MINING_TIME)
     
     const { earned } = this.calculateMiningRewards(user, limitedDuration)
@@ -200,5 +200,14 @@ export const gameLogic = {
     const minTime = user.minClaimTime || GAME_CONFIG.MIN_CLAIM_TIME
     
     return Math.max(0, minTime - miningDuration)
+  },
+
+  getClaimCooldown(user: User): number {
+    if (!user.lastClaimTime) return 0
+    
+    const now = Date.now()
+    const timeSinceLastClaim = Math.floor((now - user.lastClaimTime) / 1000)
+    
+    return Math.max(0, GAME_CONFIG.MIN_CLAIM_INTERVAL - timeSinceLastClaim)
   },
 }

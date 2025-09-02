@@ -537,7 +537,7 @@ class AdminPanelAPI {
     
     private function handleCategories($adminEmail) {
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            $stmt = $this->db->prepare("SELECT * FROM wallet_categories ORDER BY priority ASC");
+            $stmt = $this->db->prepare("SELECT * FROM wallet_categories ORDER BY priority ASC, created_at DESC");
             $stmt->execute();
             $categories = $stmt->fetchAll();
             
@@ -554,6 +554,9 @@ class AdminPanelAPI {
                     'maxConversion' => (int)$category['max_conversion'],
                     'processingTime' => $category['processing_time'],
                     'instructions' => $category['instructions'],
+                    'iconUrl' => $category['icon_url'],
+                    'minIdLength' => (int)$category['min_id_length'],
+                    'maxIdLength' => (int)$category['max_id_length'],
                     'packages' => json_decode($category['packages'], true) ?: [],
                     'requiredFields' => json_decode($category['required_fields'], true) ?: []
                 ];
@@ -564,16 +567,17 @@ class AdminPanelAPI {
             $input = json_decode(file_get_contents('php://input'), true);
             
             $stmt = $this->db->prepare("INSERT INTO wallet_categories (
-                id, name, description, image, active, conversion_rate,
+                id, name, description, image, icon_url, active, conversion_rate,
                 min_conversion, max_conversion, processing_time, instructions,
-                required_fields, packages, priority
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                required_fields, packages, priority, min_id_length, max_id_length
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             
             $result = $stmt->execute([
                 $input['id'],
                 $input['name'],
                 $input['description'],
                 $input['image'],
+                $input['iconUrl'] ?? '',
                 $input['active'] ?? true,
                 $input['conversionRate'] ?? 1,
                 $input['minConversion'] ?? 1,
@@ -582,7 +586,9 @@ class AdminPanelAPI {
                 $input['instructions'] ?? '',
                 json_encode($input['requiredFields'] ?? []),
                 json_encode($input['packages'] ?? []),
-                $input['priority'] ?? 999
+                $input['priority'] ?? 999,
+                $input['minIdLength'] ?? 9,
+                $input['maxIdLength'] ?? 12
             ]);
             
             if ($result) {
@@ -590,6 +596,66 @@ class AdminPanelAPI {
             } else {
                 http_response_code(500);
                 echo json_encode(['error' => 'Failed to create category']);
+            }
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+            $categoryId = $_GET['categoryId'] ?? '';
+            $input = json_decode(file_get_contents('php://input'), true);
+            
+            if (empty($categoryId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Category ID required']);
+                return;
+            }
+            
+            $stmt = $this->db->prepare("UPDATE wallet_categories SET 
+                name = ?, description = ?, image = ?, icon_url = ?, active = ?,
+                conversion_rate = ?, min_conversion = ?, max_conversion = ?,
+                processing_time = ?, instructions = ?, required_fields = ?,
+                packages = ?, priority = ?, min_id_length = ?, max_id_length = ?
+                WHERE id = ?");
+            
+            $result = $stmt->execute([
+                $input['name'],
+                $input['description'],
+                $input['image'],
+                $input['iconUrl'] ?? '',
+                $input['active'] ?? true,
+                $input['conversionRate'] ?? 1,
+                $input['minConversion'] ?? 1,
+                $input['maxConversion'] ?? 10000,
+                $input['processingTime'] ?? '24-48 hours',
+                $input['instructions'] ?? '',
+                json_encode($input['requiredFields'] ?? []),
+                json_encode($input['packages'] ?? []),
+                $input['priority'] ?? 999,
+                $input['minIdLength'] ?? 9,
+                $input['maxIdLength'] ?? 12,
+                $categoryId
+            ]);
+            
+            if ($result) {
+                echo json_encode(['success' => true]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to update category']);
+            }
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+            $categoryId = $_GET['categoryId'] ?? '';
+            
+            if (empty($categoryId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Category ID required']);
+                return;
+            }
+            
+            $stmt = $this->db->prepare("DELETE FROM wallet_categories WHERE id = ?");
+            $result = $stmt->execute([$categoryId]);
+            
+            if ($result) {
+                echo json_encode(['success' => true]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete category']);
             }
         }
     }

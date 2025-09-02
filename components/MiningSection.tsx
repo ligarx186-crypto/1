@@ -56,19 +56,26 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
       // Initial load
       updateMiningStatus()
       
-      // Update every 5 seconds instead of every second for performance
+      // Update every second for real-time countdown
       interval = setInterval(() => {
-        if (miningStatus) {
-          // Update local timers
-          setTimeLeft(prev => Math.max(0, prev - 5))
-          setClaimTimeLeft(prev => Math.max(0, prev - 5))
-          
-          // Refresh from server every 30 seconds
-          if (Date.now() % 30000 < 5000) {
-            updateMiningStatus()
-          }
+        // Update local timers every second
+        setTimeLeft(prev => Math.max(0, prev - 1))
+        setClaimTimeLeft(prev => Math.max(0, prev - 1))
+        
+        // Update rewards display
+        if (user.isMining && user.miningStartTime) {
+          const now = Date.now()
+          const duration = Math.floor((now - user.miningStartTime) / 1000)
+          const limitedDuration = Math.min(duration, 1800) // 30 minutes max
+          const rewards = (user.miningRate || 0.001) * limitedDuration
+          setCurrentRewards(rewards)
         }
-      }, 5000)
+        
+        // Refresh from server every 30 seconds
+        if (Date.now() % 30000 < 1000) {
+          updateMiningStatus()
+        }
+      }, 1000)
     } else {
       setCanClaim(false)
       setTimeLeft(0)
@@ -394,6 +401,22 @@ export const MiningSection = ({ user, onStartMining, onClaimRewards, onOpenRank 
               {canClaim ? "Claim" : timeLeft > 0 ? `Mine ${formatTime(timeLeft)}` : `Wait ${formatTime(claimTimeLeft)}`}
             </button>
           )}
+          
+          {/* Mining Info */}
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "8px 16px",
+              background: "rgba(0, 0, 0, 0.3)",
+              borderRadius: "12px",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#10b981", fontWeight: "bold" }}>
+              ⛏️ Mining Limit: 30 minutes | 🕐 Claim Cooldown: 5 minutes
+            </div>
+          </div>
 
           {/* Banner Section */}
           <div

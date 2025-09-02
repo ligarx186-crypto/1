@@ -2,18 +2,21 @@
 require_once 'backend/config.php';
 
 // Bot configuration
-$botToken = BOT_TOKEN;
-$botUsername = BOT_USERNAME;
-$webAppUrl = WEBAPP_URL;
+$botToken = '7270345128:AAEuRX7lABDMBRh6lRU1d-4aFzbiIhNgOWE';
+$botUsername = 'UCCoinUltraBot';
+$webAppUrl = 'https://your-domain.com';
+$avatarBaseUrl = 'https://your-domain.com/avatars';
 
 class TelegramBot {
     private $db;
     private $botToken;
     private $webAppUrl;
+    private $avatarBaseUrl;
     
-    public function __construct($token, $webAppUrl) {
+    public function __construct($token, $webAppUrl, $avatarBaseUrl) {
         $this->botToken = $token;
         $this->webAppUrl = $webAppUrl;
+        $this->avatarBaseUrl = $avatarBaseUrl;
         $this->db = Database::getInstance()->getConnection();
     }
     
@@ -85,11 +88,21 @@ class TelegramBot {
             }
             
             $avatarPath = $avatarDir . $userId . '.png';
+            
+            // Check if avatar already exists and URL hasn't changed
+            $stmt = $this->db->prepare("SELECT avatar_url FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $currentAvatarUrl = $stmt->fetchColumn();
+            
+            if ($currentAvatarUrl && file_exists($avatarPath) && $currentAvatarUrl === $this->avatarBaseUrl . '/' . $userId . '.png') {
+                return $currentAvatarUrl; // Avatar already exists and hasn't changed
+            }
+            
             $avatarContent = file_get_contents($avatarUrl);
             
             if ($avatarContent !== false) {
                 file_put_contents($avatarPath, $avatarContent);
-                return AVATAR_BASE_URL . '/' . $userId . '.png';
+                return $this->avatarBaseUrl . '/' . $userId . '.png';
             }
         } catch (Exception $e) {
             $this->log("Failed to download avatar for user $userId: " . $e->getMessage());
@@ -106,7 +119,7 @@ class TelegramBot {
         try {
             $this->db->beginTransaction();
             
-            // Download and save avatar
+            // Download and save avatar only for new users
             $localAvatarUrl = '';
             if (!empty($userData['avatar_url'])) {
                 $localAvatarUrl = $this->downloadAndSaveAvatar($userData['id'], $userData['avatar_url']);
@@ -144,6 +157,24 @@ class TelegramBot {
             $this->db->rollback();
             $this->log("User creation failed: " . $e->getMessage());
             return false;
+        }
+    }
+    
+    private function updateUserAvatar($userId, $newAvatarUrl) {
+        if (empty($newAvatarUrl)) return;
+        
+        // Check if avatar has changed
+        $stmt = $this->db->prepare("SELECT avatar_url FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $currentAvatarUrl = $stmt->fetchColumn();
+        
+        // Only update if avatar URL has changed
+        if ($currentAvatarUrl !== $newAvatarUrl) {
+            $localAvatarUrl = $this->downloadAndSaveAvatar($userId, $newAvatarUrl);
+            if ($localAvatarUrl) {
+                $stmt = $this->db->prepare("UPDATE users SET avatar_url = ? WHERE id = ?");
+                $stmt->execute([$localAvatarUrl, $userId]);
+            }
         }
     }
     
@@ -198,7 +229,11 @@ class TelegramBot {
             $existingUser = $this->getUser($userId);
             
             if ($existingUser) {
-                // Existing user
+                // Existing user - check for avatar updates
+                if (!empty($user['photo_url'])) {
+                    $this->updateUserAvatar($userId, $user['photo_url']);
+                }
+                
                 $authKey = $existingUser['auth_key'];
                 $refAuth = $existingUser['ref_auth'];
                 
@@ -234,31 +269,8 @@ class TelegramBot {
             // Generate secure auth URL
             $authUrl = $this->generateAuthUrl($userId, $authKey, $refId, $refAuth);
             
-            // Create inline keyboard
-            $keyboard = [
-                'inline_keyboard' => [
-                    [
-                        [
-                            'text' => '🎮 Open DRX Mining',
-                            'web_app' => ['url' => $authUrl]
-                        ]
-                    ],
-                    [
-                        [
-                            'text' => '📢 Join Channel',
-                            'url' => 'https://t.me/ligarx_boy'
-                        ]
-                    ],
-                    [
-                        [
-                            'text' => '👥 Invite Friends',
-                            'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/{$botUsername}?start=ref_{$userId}"
-                        ]
-                    ]
-                ]
-            ];
-            
-            $this->sendMessage($chatId, $welcomeText, $keyboard);
+            // Send welcome message with photo and buttons
+            $this->sendWelcomeMessage($chatId, $welcomeText, $authUrl, $userId);
             
         } catch (Exception $e) {
             $this->log("Start command failed for user $userId: " . $e->getMessage());
@@ -266,13 +278,60 @@ class TelegramBot {
         }
     }
     
+    private function sendWelcomeMessage($chatId, $text, $authUrl, $userId) {
+        // Send photo with caption and inline keyboard
+        $photoUrl = "https://api.telegram.org/bot{$this->botToken}/sendPhoto";
+        
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    [
+                        'text' => '🎮 Open DRX Mining',
+                        'web_app' => ['url' => $authUrl]
+                    ]
+                ],
+                [
+                    [
+                        'text' => '📢 Join Channel',
+                        'url' => 'https://t.me/ligarx_boy'
+                    ]
+                ],
+                [
+                    [
+                        'text' => '👥 Invite Friends',
+                        'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/{$botUsername}?start=ref_{$userId}"
+                    ]
+                ]
+            ]
+        ];
+        
+        $data = [
+            'chat_id' => $chatId,
+            'photo' => 'https://i.ibb.co/whrjJxzQ/download-2.png',
+            'caption' => $text,
+            'parse_mode' => 'HTML',
+            'reply_markup' => json_encode($keyboard)
+        ];
+        
+        $options = [
+            'http' => [
+                'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+                'method' => 'POST',
+                'content' => http_build_query($data)
+            ]
+        ];
+        
+        $context = stream_context_create($options);
+        file_get_contents($photoUrl, false, $context);
+    }
+    
     private function handleHelpCommand($chatId) {
         $helpText = "🎮 <b>DRX Mining Bot Help</b>\n\n";
         $helpText .= "⛏️ <b>Mining:</b>\n";
         $helpText .= "• Start mining to earn DRX coins\n";
         $helpText .= "• Minimum mining time: 30 minutes\n";
-        $helpText .= "• Maximum mining time: 39 minutes\n";
-        $helpText .= "• Works offline - rewards accumulate!\n\n";
+        $helpText .= "• Works offline - rewards accumulate!\n";
+        $helpText .= "• 5-minute cooldown between claims\n\n";
         $helpText .= "🚀 <b>Boosts:</b>\n";
         $helpText .= "• Mining Speed: Increase efficiency\n";
         $helpText .= "• Claim Time: Reduce minimum wait time\n";
@@ -360,13 +419,7 @@ class TelegramBot {
 
 // Handle webhook
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Get webapp URL from config
-    $db = Database::getInstance()->getConnection();
-    $stmt = $db->prepare("SELECT setting_value FROM config WHERE setting_key = 'webapp_url'");
-    $stmt->execute();
-    $webAppUrl = $stmt->fetchColumn() ?: 'https://your-domain.com';
-    
-    $bot = new TelegramBot($botToken, $webAppUrl);
+    $bot = new TelegramBot($botToken, $webAppUrl, $avatarBaseUrl);
     $bot->handleWebhook();
 } else {
     echo "DRX Mining Bot is running!";

@@ -16,14 +16,12 @@ define('WELCOME_BONUS', 100);
 define('REFERRAL_BONUS', 200);
 define('BASE_MINING_RATE', 0.001);
 define('MIN_CLAIM_TIME', 1800); // 30 minutes minimum mining time
-define('MAX_MINING_TIME', 2340); // 39 minutes maximum mining time
+define('MAX_MINING_TIME', 1800); // 30 minutes maximum mining time (not 39)
 define('CLAIM_TIME_REDUCTION', 60); // seconds per boost level
+define('MIN_CLAIM_INTERVAL', 300); // 5 minutes between claims
 
-// Bot configuration
-define('BOT_TOKEN', '7270345128:AAEuRX7lABDMBRh6lRU1d-4aFzbiIhNgOWE');
-define('BOT_USERNAME', 'UCCoinUltraBot');
-define('WEBAPP_URL', 'https://your-domain.com'); // Update with your domain
-define('AVATAR_BASE_URL', 'https://your-domain.com/avatars'); // Update with your domain
+// API Security Settings
+define('AUTH_KEY_DETECTION', true); // Set to false to disable authKey validation
 
 class Database {
     private static $instance = null;
@@ -79,6 +77,8 @@ function initializeTables() {
         last_name VARCHAR(255) DEFAULT '',
         avatar_url TEXT,
         auth_key VARCHAR(128) UNIQUE NOT NULL,
+        ref_auth VARCHAR(32) DEFAULT '',
+        ref_auth_used VARCHAR(32) DEFAULT '',
         balance DECIMAL(15,8) DEFAULT 0,
         uc_balance DECIMAL(15,8) DEFAULT 0,
         energy_limit INT DEFAULT 500,
@@ -122,10 +122,6 @@ function initializeTables() {
         INDEX idx_total_earned (total_earned),
         INDEX idx_last_active (last_active)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Add ref_auth column to users table
-    $db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS ref_auth VARCHAR(32) DEFAULT ''");
-    $db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS ref_auth_used VARCHAR(32) DEFAULT ''");
     
     // Missions table
     $db->exec("CREATE TABLE IF NOT EXISTS missions (
@@ -173,8 +169,6 @@ function initializeTables() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY unique_user_mission (user_id, mission_id),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE,
         INDEX idx_user_id (user_id),
         INDEX idx_mission_id (mission_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -187,8 +181,6 @@ function initializeTables() {
         earned INT DEFAULT " . REFERRAL_BONUS . ",
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY unique_referral (referrer_id, referred_id),
-        FOREIGN KEY (referrer_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (referred_id) REFERENCES users(id) ON DELETE CASCADE,
         INDEX idx_referrer (referrer_id),
         INDEX idx_referred (referred_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -210,7 +202,6 @@ function initializeTables() {
         completed_at BIGINT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         INDEX idx_user_id (user_id),
         INDEX idx_status (status),
         INDEX idx_requested_at (requested_at)
@@ -233,12 +224,6 @@ function initializeTables() {
         setting_value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Insert default config
-    $db->exec("INSERT IGNORE INTO config (setting_key, setting_value) VALUES 
-        ('bot_token', '" . BOT_TOKEN . "'),
-        ('bot_username', '" . BOT_USERNAME . "'),
-        ('banner_url', 'https://mining-master.onrender.com//assets/banner-BH8QO14f.png')");
     
     // Create admins table
     $db->exec("CREATE TABLE IF NOT EXISTS admins (
@@ -269,6 +254,7 @@ function initializeTables() {
         name VARCHAR(255) NOT NULL,
         description TEXT,
         image TEXT,
+        icon_url TEXT,
         active BOOLEAN DEFAULT TRUE,
         conversion_rate DECIMAL(10,4) DEFAULT 1,
         min_conversion INT DEFAULT 1,
@@ -278,6 +264,8 @@ function initializeTables() {
         required_fields JSON,
         packages JSON,
         priority INT DEFAULT 999,
+        min_id_length INT DEFAULT 9,
+        max_id_length INT DEFAULT 12,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_active (active),
@@ -286,20 +274,6 @@ function initializeTables() {
     
     // Insert mega admin
     $db->exec("INSERT IGNORE INTO admins (admin_id, added_by, added_at) VALUES ('6547102814', 'system', NOW())");
-    
-    // Insert default wallet categories
-    $db->exec("INSERT IGNORE INTO wallet_categories (id, name, description, image, packages, required_fields) VALUES 
-        ('pubg_mobile', 'PUBG Mobile', 'Convert DRX to UC for PUBG Mobile', 'https://images.pexels.com/photos/442576/pexels-photo-442576.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop', 
-         '[{\"id\":\"uc_60\",\"name\":\"60 UC\",\"amount\":60,\"drxCost\":60,\"popular\":false}]',
-         '[{\"id\":\"pubg_id\",\"name\":\"pubgId\",\"label\":\"PUBG Mobile ID\",\"type\":\"number\",\"required\":true}]'),
-        ('telegram', 'Telegram Stars', 'Convert DRX to Telegram Stars', 'https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop',
-         '[{\"id\":\"stars_10\",\"name\":\"10 Stars\",\"amount\":10,\"drxCost\":100,\"popular\":false}]',
-         '[{\"id\":\"telegram_username\",\"name\":\"telegramUsername\",\"label\":\"Telegram Username\",\"type\":\"text\",\"required\":true}]')");
-    
-    // Insert default config
-    $db->exec("INSERT IGNORE INTO config (setting_key, setting_value) VALUES 
-        ('webapp_url', 'https://your-domain.com'),
-        ('avatar_base_url', 'https://your-domain.com/avatars')");
 }
 
 // Initialize tables on first run

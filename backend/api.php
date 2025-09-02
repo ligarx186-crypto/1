@@ -1,18 +1,23 @@
 <?php
 require_once 'config.php';
 
+// Bot configuration - moved from config.php
+define('BOT_TOKEN', '7270345128:AAEuRX7lABDMBRh6lRU1d-4aFzbiIhNgOWE');
+define('BOT_USERNAME', 'UCCoinUltraBot');
+define('WEBAPP_URL', 'https://your-domain.com');
+define('AVATAR_BASE_URL', 'https://your-domain.com/avatars');
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Key, X-Telegram-Init-Data, X-Ref-Id, X-Ref-Auth');
 
-// Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-class SecureAPI {
+class FastSecureAPI {
     private $db;
     private $authAttempts = [];
     
@@ -47,28 +52,29 @@ class SecureAPI {
     }
     
     private function validateUser($userId, $authKey, $telegramInitData = '') {
-        if (empty($userId) || empty($authKey)) {
-            return false;
-        }
+        if (empty($userId)) return false;
         
-        // Check auth attempts limit
-        $clientId = $_SERVER['REMOTE_ADDR'] . '_' . $userId;
-        if (isset($this->authAttempts[$clientId]) && $this->authAttempts[$clientId] >= 5) {
-            return false;
-        }
-        
-        // Validate Telegram data if provided
+        // Always validate Telegram init data
         if ($telegramInitData) {
             $telegramData = $this->checkTelegramAuthorization($telegramInitData, BOT_TOKEN);
             if (!$telegramData || $telegramData['user']['id'] != $userId) {
-                $this->authAttempts[$clientId] = ($this->authAttempts[$clientId] ?? 0) + 1;
                 return false;
             }
         }
         
-        $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND auth_key = ? AND status = 'active'");
-        $stmt->execute([$userId, $authKey]);
-        return $stmt->fetchColumn() !== false;
+        // Check authKey only if AUTH_KEY_DETECTION is enabled
+        if (AUTH_KEY_DETECTION) {
+            if (empty($authKey)) return false;
+            
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND auth_key = ? AND status = 'active'");
+            $stmt->execute([$userId, $authKey]);
+            return $stmt->fetchColumn() !== false;
+        } else {
+            // Only check if user exists and is active
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND status = 'active'");
+            $stmt->execute([$userId]);
+            return $stmt->fetchColumn() !== false;
+        }
     }
     
     private function checkRateLimit($ip) {
@@ -228,7 +234,7 @@ class SecureAPI {
             return;
         }
         
-        // Only bot can create new users - reject frontend creation attempts
+        // Only bot can create new users
         http_response_code(403);
         echo json_encode(['error' => 'User creation not allowed from frontend']);
     }
@@ -247,11 +253,11 @@ class SecureAPI {
             return;
         }
         
-        // Get mining status without auth for performance
+        // Fast mining status check without auth for performance
         $stmt = $this->db->prepare("SELECT 
             is_mining, mining_start_time, pending_rewards, mining_rate, 
             min_claim_time, last_claim_time 
-            FROM users WHERE id = ?");
+            FROM users WHERE id = ? AND status = 'active'");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
         
@@ -273,7 +279,7 @@ class SecureAPI {
             
             // Check if can claim (30 min minimum + 5 min between claims)
             $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
-            $canClaim = $miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= 300;
+            $canClaim = $miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL;
         }
         
         echo json_encode([
@@ -282,7 +288,7 @@ class SecureAPI {
             'pendingRewards' => $pendingRewards,
             'canClaim' => $canClaim,
             'remainingTime' => max(0, $user['min_claim_time'] - $miningDuration),
-            'claimCooldown' => max(0, 300 - floor(($now - ($user['last_claim_time'] ?: 0)) / 1000))
+            'claimCooldown' => max(0, MIN_CLAIM_INTERVAL - floor(($now - ($user['last_claim_time'] ?: 0)) / 1000))
         ]);
     }
     
@@ -323,9 +329,10 @@ class SecureAPI {
                         balance = balance + ?, 
                         total_earned = total_earned + ?, 
                         bonus_claimed = TRUE,
-                        data_initialized = TRUE
+                        data_initialized = TRUE,
+                        last_active = ?
                         WHERE id = ?");
-                    $stmt->execute([WELCOME_BONUS, WELCOME_BONUS, $userId]);
+                    $stmt->execute([WELCOME_BONUS, WELCOME_BONUS, time() * 1000, $userId]);
                     
                     // Process referral bonus if valid
                     if ($user['referred_by'] && $user['ref_auth_used']) {
@@ -359,7 +366,7 @@ class SecureAPI {
                     $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
                     
                     // Check if can claim
-                    if ($miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= 300) {
+                    if ($miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL) {
                         $limitedDuration = min($miningDuration, MAX_MINING_TIME);
                         $earned = $user['mining_rate'] * $limitedDuration;
                         $xp = floor($limitedDuration / 60); // 1 XP per minute
@@ -534,9 +541,10 @@ class SecureAPI {
                 balance = balance + ?, 
                 total_earned = total_earned + ?, 
                 referral_count = referral_count + 1,
-                xp = xp + 60
+                xp = xp + 60,
+                last_active = ?
                 WHERE id = ?");
-            $stmt->execute([REFERRAL_BONUS, REFERRAL_BONUS, $referrerId]);
+            $stmt->execute([REFERRAL_BONUS, REFERRAL_BONUS, time() * 1000, $referrerId]);
             
             $this->log("Referral bonus processed: $referrerId -> $referredId");
             return true;
@@ -766,10 +774,6 @@ class SecureAPI {
             ]);
             
             if ($result) {
-                // Deduct DRX from user balance
-                $stmt = $this->db->prepare("UPDATE users SET balance = balance - ? WHERE id = ?");
-                $stmt->execute([$input['amount'], $userId]);
-                
                 echo json_encode(['success' => true, 'conversionId' => $conversionId]);
             } else {
                 echo json_encode(['success' => false, 'message' => 'Failed to create conversion']);
@@ -817,6 +821,7 @@ class SecureAPI {
                 'name' => $category['name'],
                 'description' => $category['description'],
                 'image' => $category['image'],
+                'iconUrl' => $category['icon_url'],
                 'active' => (bool)$category['active'],
                 'conversionRate' => (float)$category['conversion_rate'],
                 'minConversion' => (int)$category['min_conversion'],
@@ -824,7 +829,9 @@ class SecureAPI {
                 'processingTime' => $category['processing_time'],
                 'instructions' => $category['instructions'],
                 'packages' => $packages,
-                'requiredFields' => $requiredFields
+                'requiredFields' => $requiredFields,
+                'minIdLength' => (int)$category['min_id_length'],
+                'maxIdLength' => (int)$category['max_id_length']
             ];
         }
         
@@ -874,8 +881,36 @@ class SecureAPI {
             return;
         }
         
-        // For now, return verified=true as Telegram API verification requires bot admin
-        echo json_encode(['verified' => true]);
+        // Backend determines channel membership without exposing bot token
+        try {
+            $url = "https://api.telegram.org/bot" . BOT_TOKEN . "/getChatMember";
+            $data = [
+                'chat_id' => '@' . $channelId,
+                'user_id' => $userId
+            ];
+            
+            $options = [
+                'http' => [
+                    'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+                    'method' => 'POST',
+                    'content' => http_build_query($data)
+                ]
+            ];
+            
+            $context = stream_context_create($options);
+            $response = file_get_contents($url, false, $context);
+            $result = json_decode($response, true);
+            
+            $verified = false;
+            if ($result && $result['ok'] && isset($result['result']['status'])) {
+                $status = $result['result']['status'];
+                $verified = in_array($status, ['member', 'administrator', 'creator']);
+            }
+            
+            echo json_encode(['verified' => $verified]);
+        } catch (Exception $e) {
+            echo json_encode(['verified' => false]);
+        }
     }
     
     private function handlePromoCodeSubmission($authKey, $telegramInitData) {
@@ -914,8 +949,8 @@ class SecureAPI {
                 $stmt->execute([$userId, $promoCode['id']]);
                 
                 // Update user balance
-                $stmt = $this->db->prepare("UPDATE users SET balance = balance + ?, total_earned = total_earned + ? WHERE id = ?");
-                $stmt->execute([$promoCode['reward'], $promoCode['reward'], $userId]);
+                $stmt = $this->db->prepare("UPDATE users SET balance = balance + ?, total_earned = total_earned + ?, last_active = ? WHERE id = ?");
+                $stmt->execute([$promoCode['reward'], $promoCode['reward'], time() * 1000, $userId]);
                 
                 echo json_encode([
                     'success' => true,
@@ -1005,6 +1040,6 @@ class SecureAPI {
 }
 
 // Initialize and handle request
-$api = new SecureAPI();
+$api = new FastSecureAPI();
 $api->handleRequest();
 ?>
