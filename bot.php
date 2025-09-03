@@ -1,11 +1,11 @@
 <?php
 require_once 'backend/config.php';
 
-// Bot configuration
-$botToken = '7270345128:AAEuRX7lABDMBRh6lRU1d-4aFzbiIhNgOWE';
-$botUsername = 'UCCoinUltraBot';
+// Bot configuration - Updated with your credentials
+$botToken = '8188857509:AAHjKKUaC_kljF1KKHZ0VW1pWkcWDfaY65k';
+$botUsername = 'tanga';
 $webAppUrl = 'https://your-domain.com';
-$avatarBaseUrl = 'https://your-domain.com/avatars';
+$avatarBaseUrl = 'http://c828.coresuz.ru/avatars';
 
 class TelegramBot {
     private $db;
@@ -82,7 +82,7 @@ class TelegramBot {
         if (empty($avatarUrl)) return '';
         
         try {
-            $avatarDir = __DIR__ . '/avatars/';
+            $avatarDir = dirname(__FILE__) . '/avatars/';
             if (!is_dir($avatarDir)) {
                 mkdir($avatarDir, 0755, true);
             }
@@ -90,7 +90,7 @@ class TelegramBot {
             $avatarPath = $avatarDir . $userId . '.png';
             
             // Check if avatar already exists and URL hasn't changed
-            $stmt = $this->db->prepare("SELECT avatar_url FROM users WHERE id = ?");
+            $stmt = $this->db->prepare("SELECT avatarUrl FROM users WHERE id = ?");
             $stmt->execute([$userId]);
             $currentAvatarUrl = $stmt->fetchColumn();
             
@@ -126,11 +126,11 @@ class TelegramBot {
             }
             
             $stmt = $this->db->prepare("INSERT INTO users (
-                id, first_name, last_name, avatar_url, auth_key, ref_auth,
-                referred_by, ref_auth_used, joined_at, last_active, 
-                balance, total_earned, mining_rate, min_claim_time, 
-                mining_speed_level, claim_time_level, mining_rate_level,
-                bonus_claimed, data_initialized, status
+                id, firstName, lastName, avatarUrl, authKey, refAuth,
+                referredBy, refAuthUsed, joinedAt, lastActive, 
+                balance, totalEarned, miningRate, minClaimTime, 
+                miningSpeedLevel, claimTimeLevel, miningRateLevel,
+                bonusClaimed, dataInitialized, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, FALSE, 'active')");
             
             $stmt->execute([
@@ -152,10 +152,11 @@ class TelegramBot {
             ]);
             
             $this->db->commit();
+            $this->log("User created successfully: $userId");
             return ['authKey' => $authKey, 'refAuth' => $refAuth];
         } catch (Exception $e) {
             $this->db->rollback();
-            $this->log("User creation failed: " . $e->getMessage());
+            $this->log("User creation failed for user $userId: " . $e->getMessage());
             return false;
         }
     }
@@ -164,7 +165,7 @@ class TelegramBot {
         if (empty($newAvatarUrl)) return;
         
         // Check if avatar has changed
-        $stmt = $this->db->prepare("SELECT avatar_url FROM users WHERE id = ?");
+        $stmt = $this->db->prepare("SELECT avatarUrl FROM users WHERE id = ?");
         $stmt->execute([$userId]);
         $currentAvatarUrl = $stmt->fetchColumn();
         
@@ -172,8 +173,9 @@ class TelegramBot {
         if ($currentAvatarUrl !== $newAvatarUrl) {
             $localAvatarUrl = $this->downloadAndSaveAvatar($userId, $newAvatarUrl);
             if ($localAvatarUrl) {
-                $stmt = $this->db->prepare("UPDATE users SET avatar_url = ? WHERE id = ?");
+                $stmt = $this->db->prepare("UPDATE users SET avatarUrl = ? WHERE id = ?");
                 $stmt->execute([$localAvatarUrl, $userId]);
+                $this->log("Avatar updated for user $userId");
             }
         }
     }
@@ -218,7 +220,7 @@ class TelegramBot {
                 $refId = substr($startParam, 4);
                 
                 // Get referrer's ref_auth
-                $stmt = $this->db->prepare("SELECT ref_auth FROM users WHERE id = ?");
+                $stmt = $this->db->prepare("SELECT refAuth FROM users WHERE id = ?");
                 $stmt->execute([$refId]);
                 $refAuth = $stmt->fetchColumn();
             }
@@ -234,11 +236,11 @@ class TelegramBot {
                     $this->updateUserAvatar($userId, $user['photo_url']);
                 }
                 
-                $authKey = $existingUser['auth_key'];
-                $refAuth = $existingUser['ref_auth'];
+                $authKey = $existingUser['authKey'];
+                $refAuth = $existingUser['refAuth'];
                 
                 // Update last active
-                $stmt = $this->db->prepare("UPDATE users SET last_active = ? WHERE id = ?");
+                $stmt = $this->db->prepare("UPDATE users SET lastActive = ? WHERE id = ?");
                 $stmt->execute([time() * 1000, $userId]);
                 
                 $welcomeText = "🎮 Welcome back, {$user['first_name']}!\n\n⛏️ Continue your DRX mining journey!";
@@ -299,7 +301,7 @@ class TelegramBot {
                 [
                     [
                         'text' => '👥 Invite Friends',
-                        'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/{$botUsername}?start=ref_{$userId}"
+                        'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/tanga?start=ref_{$userId}"
                     ]
                 ]
             ]
@@ -367,9 +369,9 @@ class TelegramBot {
             
             $statsText = "📊 <b>Your Statistics</b>\n\n";
             $statsText .= "💰 <b>Balance:</b> " . number_format($userData['balance'], 3) . " DRX\n";
-            $statsText .= "⛏️ <b>Total Earned:</b> " . number_format($userData['total_earned'], 3) . " DRX\n";
-            $statsText .= "👥 <b>Referrals:</b> {$userData['referral_count']}\n";
-            $statsText .= "📅 <b>Joined:</b> " . date('Y-m-d', $userData['joined_at']/1000) . "\n\n";
+            $statsText .= "⛏️ <b>Total Earned:</b> " . number_format($userData['totalEarned'], 3) . " DRX\n";
+            $statsText .= "👥 <b>Referrals:</b> {$userData['referralCount']}\n";
+            $statsText .= "📅 <b>Joined:</b> " . date('Y-m-d', $userData['joinedAt']/1000) . "\n\n";
             $statsText .= "🎮 <b>Open the app to see full statistics!</b>";
             
             $keyboard = [
@@ -377,7 +379,7 @@ class TelegramBot {
                     [
                         [
                             'text' => '🎮 Open Game',
-                            'web_app' => ['url' => $this->generateAuthUrl($userId, $userData['auth_key'])]
+                            'web_app' => ['url' => $this->generateAuthUrl($userId, $userData['authKey'])]
                         ]
                     ]
                 ]
@@ -400,7 +402,7 @@ class TelegramBot {
         }
         
         // Generate game URL
-        $authUrl = $this->generateAuthUrl($userId, $userData['auth_key']);
+        $authUrl = $this->generateAuthUrl($userId, $userData['authKey']);
         
         $keyboard = [
             'inline_keyboard' => [
@@ -419,8 +421,12 @@ class TelegramBot {
 
 // Handle webhook
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $bot = new TelegramBot($botToken, $webAppUrl, $avatarBaseUrl);
-    $bot->handleWebhook();
+    try {
+        $bot = new TelegramBot($botToken, $webAppUrl, $avatarBaseUrl);
+        $bot->handleWebhook();
+    } catch (Exception $e) {
+        error_log("Bot webhook error: " . $e->getMessage());
+    }
 } else {
     echo "DRX Mining Bot is running!";
 }

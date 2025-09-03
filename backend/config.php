@@ -1,9 +1,9 @@
 <?php
-// Database configuration
+// Database configuration - Updated with your credentials
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'uc_coin_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_NAME', 'c828_ligarx');
+define('DB_USER', 'c828_ligarx');
+define('DB_PASS', 'ligarx');
 
 // Security configuration
 define('AUTH_KEY_LENGTH', 64);
@@ -16,7 +16,7 @@ define('WELCOME_BONUS', 100);
 define('REFERRAL_BONUS', 200);
 define('BASE_MINING_RATE', 0.001);
 define('MIN_CLAIM_TIME', 1800); // 30 minutes minimum mining time
-define('MAX_MINING_TIME', 1800); // 30 minutes maximum mining time (not 39)
+define('MAX_MINING_TIME', 1800); // 30 minutes maximum mining time
 define('CLAIM_TIME_REDUCTION', 60); // seconds per boost level
 define('MIN_CLAIM_INTERVAL', 300); // 5 minutes between claims
 
@@ -66,216 +66,273 @@ class Database {
     }
 }
 
-// Initialize database tables
+// Auto-initialize database tables with correct column names
 function initializeTables() {
     $db = Database::getInstance()->getConnection();
     
-    // Users table
-    $db->exec("CREATE TABLE IF NOT EXISTS users (
-        id VARCHAR(255) PRIMARY KEY,
-        first_name VARCHAR(255) NOT NULL,
-        last_name VARCHAR(255) DEFAULT '',
-        avatar_url TEXT,
-        auth_key VARCHAR(128) UNIQUE NOT NULL,
-        ref_auth VARCHAR(32) DEFAULT '',
-        ref_auth_used VARCHAR(32) DEFAULT '',
-        balance DECIMAL(15,8) DEFAULT 0,
-        uc_balance DECIMAL(15,8) DEFAULT 0,
-        energy_limit INT DEFAULT 500,
-        multi_tap_value INT DEFAULT 1,
-        recharging_speed INT DEFAULT 1,
-        tap_bot_purchased BOOLEAN DEFAULT FALSE,
-        tap_bot_active BOOLEAN DEFAULT FALSE,
-        bonus_claimed BOOLEAN DEFAULT FALSE,
-        pubg_id VARCHAR(255) DEFAULT '',
-        total_taps INT DEFAULT 0,
-        total_earned DECIMAL(15,8) DEFAULT 0,
-        last_jackpot_time BIGINT DEFAULT 0,
-        referred_by VARCHAR(255) DEFAULT '',
-        referral_count INT DEFAULT 0,
-        level_num INT DEFAULT 1,
-        xp INT DEFAULT 0,
-        streak INT DEFAULT 0,
-        combo INT DEFAULT 0,
-        last_tap_time BIGINT DEFAULT 0,
-        is_mining BOOLEAN DEFAULT FALSE,
-        mining_start_time BIGINT DEFAULT 0,
-        last_claim_time BIGINT DEFAULT 0,
-        pending_rewards DECIMAL(15,8) DEFAULT 0,
-        mining_rate DECIMAL(15,8) DEFAULT " . BASE_MINING_RATE . ",
-        min_claim_time INT DEFAULT " . MIN_CLAIM_TIME . ",
-        mining_speed_level INT DEFAULT 1,
-        claim_time_level INT DEFAULT 1,
-        mining_rate_level INT DEFAULT 1,
-        sound_enabled BOOLEAN DEFAULT TRUE,
-        vibration_enabled BOOLEAN DEFAULT TRUE,
-        notifications_enabled BOOLEAN DEFAULT TRUE,
-        joined_at BIGINT NOT NULL,
-        last_active BIGINT NOT NULL,
-        is_returning_user BOOLEAN DEFAULT FALSE,
-        data_initialized BOOLEAN DEFAULT FALSE,
-        status ENUM('active', 'banned', 'suspended') DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_auth_key (auth_key),
-        INDEX idx_referred_by (referred_by),
-        INDEX idx_total_earned (total_earned),
-        INDEX idx_last_active (last_active)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Missions table
-    $db->exec("CREATE TABLE IF NOT EXISTS missions (
-        id VARCHAR(255) PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        description TEXT NOT NULL,
-        detailed_description TEXT,
-        reward INT NOT NULL,
-        required_count INT DEFAULT 1,
-        channel_id VARCHAR(255),
-        url TEXT,
-        code VARCHAR(255),
-        required_time INT,
-        active BOOLEAN DEFAULT TRUE,
-        category VARCHAR(100) NOT NULL,
-        type ENUM('join_channel', 'join_group', 'url_timer', 'promo_code', 'multi_promo_code', 'daily_taps', 'invite_friends') NOT NULL,
-        icon VARCHAR(255),
-        img TEXT,
-        priority INT DEFAULT 999,
-        instructions JSON,
-        tips JSON,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NULL,
-        reset_daily BOOLEAN DEFAULT FALSE,
-        INDEX idx_active (active),
-        INDEX idx_type (type),
-        INDEX idx_priority (priority)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // User missions table
-    $db->exec("CREATE TABLE IF NOT EXISTS user_missions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        mission_id VARCHAR(255) NOT NULL,
-        started BOOLEAN DEFAULT FALSE,
-        completed BOOLEAN DEFAULT FALSE,
-        claimed BOOLEAN DEFAULT FALSE,
-        current_count INT DEFAULT 0,
-        started_date BIGINT,
-        completed_at BIGINT,
-        claimed_at BIGINT,
-        last_verify_attempt BIGINT,
-        timer_started BIGINT,
-        code_submitted VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY unique_user_mission (user_id, mission_id),
-        INDEX idx_user_id (user_id),
-        INDEX idx_mission_id (mission_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Referrals table
-    $db->exec("CREATE TABLE IF NOT EXISTS referrals (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        referrer_id VARCHAR(255) NOT NULL,
-        referred_id VARCHAR(255) NOT NULL,
-        earned INT DEFAULT " . REFERRAL_BONUS . ",
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY unique_referral (referrer_id, referred_id),
-        INDEX idx_referrer (referrer_id),
-        INDEX idx_referred (referred_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Conversions table
-    $db->exec("CREATE TABLE IF NOT EXISTS conversions (
-        id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        from_currency VARCHAR(50) NOT NULL,
-        to_currency VARCHAR(50) NOT NULL,
-        amount DECIMAL(15,8) NOT NULL,
-        converted_amount DECIMAL(15,8) NOT NULL,
-        category VARCHAR(100) NOT NULL,
-        package_type VARCHAR(100) NOT NULL,
-        package_image TEXT,
-        required_info JSON,
-        status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-        requested_at BIGINT NOT NULL,
-        completed_at BIGINT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_user_id (user_id),
-        INDEX idx_status (status),
-        INDEX idx_requested_at (requested_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Rate limiting table
-    $db->exec("CREATE TABLE IF NOT EXISTS rate_limits (
-        ip VARCHAR(45) NOT NULL,
-        request_count INT DEFAULT 1,
-        window_start BIGINT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (ip),
-        INDEX idx_window_start (window_start)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Config table
-    $db->exec("CREATE TABLE IF NOT EXISTS config (
-        setting_key VARCHAR(100) PRIMARY KEY,
-        setting_value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Create admins table
-    $db->exec("CREATE TABLE IF NOT EXISTS admins (
-        admin_id VARCHAR(255) PRIMARY KEY,
-        added_by VARCHAR(255) NOT NULL,
-        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Create promo codes table for multi-promo missions
-    $db->exec("CREATE TABLE IF NOT EXISTS promo_codes (
-        id VARCHAR(255) PRIMARY KEY,
-        code VARCHAR(255) UNIQUE NOT NULL,
-        reward INT NOT NULL,
-        description TEXT,
-        used_by VARCHAR(255) DEFAULT NULL,
-        used_at TIMESTAMP NULL,
-        expires_at TIMESTAMP NULL,
-        created_by VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_code (code),
-        INDEX idx_used_by (used_by),
-        INDEX idx_expires_at (expires_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Wallet categories table
-    $db->exec("CREATE TABLE IF NOT EXISTS wallet_categories (
-        id VARCHAR(255) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        image TEXT,
-        icon_url TEXT,
-        active BOOLEAN DEFAULT TRUE,
-        conversion_rate DECIMAL(10,4) DEFAULT 1,
-        min_conversion INT DEFAULT 1,
-        max_conversion INT DEFAULT 10000,
-        processing_time VARCHAR(255) DEFAULT '24-48 hours',
-        instructions TEXT,
-        required_fields JSON,
-        packages JSON,
-        priority INT DEFAULT 999,
-        min_id_length INT DEFAULT 9,
-        max_id_length INT DEFAULT 12,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_active (active),
-        INDEX idx_priority (priority)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    
-    // Insert mega admin
-    $db->exec("INSERT IGNORE INTO admins (admin_id, added_by, added_at) VALUES ('6547102814', 'system', NOW())");
+    try {
+        // Users table with correct column names (camelCase)
+        $db->exec("CREATE TABLE IF NOT EXISTS users (
+            id VARCHAR(255) PRIMARY KEY,
+            firstName VARCHAR(255) NOT NULL,
+            lastName VARCHAR(255) DEFAULT '',
+            avatarUrl TEXT,
+            authKey VARCHAR(128) UNIQUE NOT NULL,
+            refAuth VARCHAR(32) DEFAULT '',
+            refAuthUsed VARCHAR(32) DEFAULT '',
+            balance DECIMAL(15,8) DEFAULT 0,
+            ucBalance DECIMAL(15,8) DEFAULT 0,
+            energyLimit INT DEFAULT 500,
+            multiTapValue INT DEFAULT 1,
+            rechargingSpeed INT DEFAULT 1,
+            tapBotPurchased BOOLEAN DEFAULT FALSE,
+            tapBotActive BOOLEAN DEFAULT FALSE,
+            bonusClaimed BOOLEAN DEFAULT FALSE,
+            pubgId VARCHAR(255) DEFAULT '',
+            totalTaps INT DEFAULT 0,
+            totalEarned DECIMAL(15,8) DEFAULT 0,
+            lastJackpotTime BIGINT DEFAULT 0,
+            referredBy VARCHAR(255) DEFAULT '',
+            referralCount INT DEFAULT 0,
+            levelNum INT DEFAULT 1,
+            xp INT DEFAULT 0,
+            streak INT DEFAULT 0,
+            combo INT DEFAULT 0,
+            lastTapTime BIGINT DEFAULT 0,
+            isMining BOOLEAN DEFAULT FALSE,
+            miningStartTime BIGINT DEFAULT 0,
+            lastClaimTime BIGINT DEFAULT 0,
+            pendingRewards DECIMAL(15,8) DEFAULT 0,
+            miningRate DECIMAL(15,8) DEFAULT " . BASE_MINING_RATE . ",
+            minClaimTime INT DEFAULT " . MIN_CLAIM_TIME . ",
+            miningSpeedLevel INT DEFAULT 1,
+            claimTimeLevel INT DEFAULT 1,
+            miningRateLevel INT DEFAULT 1,
+            soundEnabled BOOLEAN DEFAULT TRUE,
+            vibrationEnabled BOOLEAN DEFAULT TRUE,
+            notificationsEnabled BOOLEAN DEFAULT TRUE,
+            joinedAt BIGINT NOT NULL,
+            lastActive BIGINT NOT NULL,
+            isReturningUser BOOLEAN DEFAULT FALSE,
+            dataInitialized BOOLEAN DEFAULT FALSE,
+            status ENUM('active', 'banned', 'suspended') DEFAULT 'active',
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_authKey (authKey),
+            INDEX idx_referredBy (referredBy),
+            INDEX idx_totalEarned (totalEarned),
+            INDEX idx_lastActive (lastActive)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Missions table
+        $db->exec("CREATE TABLE IF NOT EXISTS missions (
+            id VARCHAR(255) PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            description TEXT NOT NULL,
+            detailedDescription TEXT,
+            reward INT NOT NULL,
+            requiredCount INT DEFAULT 1,
+            channelId VARCHAR(255),
+            url TEXT,
+            code VARCHAR(255),
+            requiredTime INT,
+            active BOOLEAN DEFAULT TRUE,
+            category VARCHAR(100) NOT NULL,
+            type ENUM('join_channel', 'join_group', 'url_timer', 'promo_code', 'multi_promo_code', 'daily_taps', 'invite_friends') NOT NULL,
+            icon VARCHAR(255),
+            img TEXT,
+            priority INT DEFAULT 999,
+            instructions JSON,
+            tips JSON,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expiresAt TIMESTAMP NULL,
+            resetDaily BOOLEAN DEFAULT FALSE,
+            INDEX idx_active (active),
+            INDEX idx_type (type),
+            INDEX idx_priority (priority)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // User missions table
+        $db->exec("CREATE TABLE IF NOT EXISTS userMissions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            userId VARCHAR(255) NOT NULL,
+            missionId VARCHAR(255) NOT NULL,
+            started BOOLEAN DEFAULT FALSE,
+            completed BOOLEAN DEFAULT FALSE,
+            claimed BOOLEAN DEFAULT FALSE,
+            currentCount INT DEFAULT 0,
+            startedDate BIGINT,
+            completedAt BIGINT,
+            claimedAt BIGINT,
+            lastVerifyAttempt BIGINT,
+            timerStarted BIGINT,
+            codeSubmitted VARCHAR(255),
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_user_mission (userId, missionId),
+            INDEX idx_userId (userId),
+            INDEX idx_missionId (missionId)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Referrals table
+        $db->exec("CREATE TABLE IF NOT EXISTS referrals (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            referrerId VARCHAR(255) NOT NULL,
+            referredId VARCHAR(255) NOT NULL,
+            earned INT DEFAULT " . REFERRAL_BONUS . ",
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_referral (referrerId, referredId),
+            INDEX idx_referrer (referrerId),
+            INDEX idx_referred (referredId)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Conversions table
+        $db->exec("CREATE TABLE IF NOT EXISTS conversions (
+            id VARCHAR(255) PRIMARY KEY,
+            userId VARCHAR(255) NOT NULL,
+            fromCurrency VARCHAR(50) NOT NULL,
+            toCurrency VARCHAR(50) NOT NULL,
+            amount DECIMAL(15,8) NOT NULL,
+            convertedAmount DECIMAL(15,8) NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            packageType VARCHAR(100) NOT NULL,
+            packageImage TEXT,
+            requiredInfo JSON,
+            status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+            requestedAt BIGINT NOT NULL,
+            completedAt BIGINT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_userId (userId),
+            INDEX idx_status (status),
+            INDEX idx_requestedAt (requestedAt)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Rate limiting table
+        $db->exec("CREATE TABLE IF NOT EXISTS rateLimits (
+            ip VARCHAR(45) NOT NULL,
+            requestCount INT DEFAULT 1,
+            windowStart BIGINT NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (ip),
+            INDEX idx_windowStart (windowStart)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Config table
+        $db->exec("CREATE TABLE IF NOT EXISTS config (
+            settingKey VARCHAR(100) PRIMARY KEY,
+            settingValue TEXT NOT NULL,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Admins table
+        $db->exec("CREATE TABLE IF NOT EXISTS admins (
+            adminId VARCHAR(255) PRIMARY KEY,
+            addedBy VARCHAR(255) NOT NULL,
+            addedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Promo codes table
+        $db->exec("CREATE TABLE IF NOT EXISTS promoCodes (
+            id VARCHAR(255) PRIMARY KEY,
+            code VARCHAR(255) UNIQUE NOT NULL,
+            reward INT NOT NULL,
+            description TEXT,
+            usedBy VARCHAR(255) DEFAULT NULL,
+            usedAt TIMESTAMP NULL,
+            expiresAt TIMESTAMP NULL,
+            createdBy VARCHAR(255) NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_code (code),
+            INDEX idx_usedBy (usedBy),
+            INDEX idx_expiresAt (expiresAt)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Wallet categories table
+        $db->exec("CREATE TABLE IF NOT EXISTS walletCategories (
+            id VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            image TEXT,
+            iconUrl TEXT,
+            active BOOLEAN DEFAULT TRUE,
+            conversionRate DECIMAL(10,4) DEFAULT 1,
+            minConversion INT DEFAULT 1,
+            maxConversion INT DEFAULT 10000,
+            processingTime VARCHAR(255) DEFAULT '24-48 hours',
+            instructions TEXT,
+            requiredFields JSON,
+            packages JSON,
+            priority INT DEFAULT 999,
+            minIdLength INT DEFAULT 9,
+            maxIdLength INT DEFAULT 12,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_active (active),
+            INDEX idx_priority (priority)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Insert mega admin
+        $db->exec("INSERT IGNORE INTO admins (adminId, addedBy, addedAt) VALUES ('6547102814', 'system', NOW())");
+        
+        // Insert default wallet categories
+        $db->exec("INSERT IGNORE INTO walletCategories (
+            id, name, description, image, iconUrl, active, conversionRate,
+            minConversion, maxConversion, processingTime, instructions,
+            requiredFields, packages, priority, minIdLength, maxIdLength
+        ) VALUES 
+        (
+            'pubg_mobile',
+            'PUBG Mobile',
+            'Convert DRX to UC for PUBG Mobile',
+            'https://i.ibb.co/60fDXMV8/pubgm-app-icon-512x512-1-e9f7efc0.png',
+            'https://i.ibb.co/60fDXMV8/pubgm-app-icon-512x512-1-e9f7efc0.png',
+            TRUE,
+            1,
+            60,
+            8100,
+            '24-48 hours',
+            'Make sure your PUBG Mobile ID is correct. UC will be delivered to your account within 24-48 hours.',
+            '[{\"id\":\"pubg_id\",\"name\":\"pubgId\",\"label\":\"PUBG Mobile ID\",\"type\":\"number\",\"placeholder\":\"Enter your PUBG Mobile ID\",\"required\":true,\"validation\":\"^[0-9]+$\",\"helpText\":\"Your PUBG Mobile ID can be found in game settings\"}]',
+            '[{\"id\":\"uc_60\",\"name\":\"60 UC\",\"amount\":60,\"drxCost\":60,\"popular\":false,\"description\":\"Basic UC package\",\"image\":\"https://i.ibb.co/GfgyhNCy/1599546007887-MVe-NUt-B6.png\"},{\"id\":\"uc_325\",\"name\":\"325 UC\",\"amount\":325,\"drxCost\":325,\"popular\":true,\"bonus\":25,\"description\":\"Popular choice with bonus\",\"image\":\"https://i.ibb.co/1g83YH9/1599546030876-PIvqw-Gaa.png\"},{\"id\":\"uc_660\",\"name\":\"660 UC\",\"amount\":660,\"drxCost\":660,\"popular\":false,\"description\":\"Great value package\",\"image\":\"https://i.ibb.co/TBZb1ndk/1599546041426-W8hm-Er-MS.png\"},{\"id\":\"uc_1800\",\"name\":\"1800 UC\",\"amount\":1800,\"drxCost\":1800,\"popular\":true,\"bonus\":100,\"description\":\"Best value with bonus\",\"image\":\"https://i.ibb.co/svwxRf4c/1599546052747-L5g-Su7-VB.png\"},{\"id\":\"uc_3850\",\"name\":\"3850 UC\",\"amount\":3850,\"drxCost\":3850,\"popular\":false,\"description\":\"Premium package\",\"image\":\"https://i.ibb.co/hFq5xFr9/1599546071746-Kqk-Ihrz-G.png\"},{\"id\":\"uc_8100\",\"name\":\"8100 UC\",\"amount\":8100,\"drxCost\":8100,\"popular\":false,\"bonus\":500,\"description\":\"Ultimate package with huge bonus\",\"image\":\"https://i.ibb.co/hFq5xFr9/1599546071746-Kqk-Ihrz-G.png\"}]',
+            1,
+            9,
+            12
+        ),
+        (
+            'telegram',
+            'Telegram Stars',
+            'Convert DRX to Telegram Stars',
+            'https://i.ibb.co/tMSTSQHf/images-3.jpg',
+            'https://i.ibb.co/tMSTSQHf/images-3.jpg',
+            TRUE,
+            10,
+            100,
+            10000,
+            '1-2 hours',
+            'Make sure your Telegram username is correct and your profile is public. Stars will be sent to your account.',
+            '[{\"id\":\"telegram_username\",\"name\":\"telegramUsername\",\"label\":\"Telegram Username\",\"type\":\"text\",\"placeholder\":\"@username\",\"required\":true,\"validation\":\"^@[a-zA-Z0-9_]{5,32}$\",\"helpText\":\"Your Telegram username (make sure your profile is public)\"}]',
+            '[{\"id\":\"stars_10\",\"name\":\"10 Stars\",\"amount\":10,\"drxCost\":100,\"popular\":false,\"description\":\"Basic stars package\",\"image\":\"https://i.ibb.co/tMSTSQHf/images-3.jpg\"},{\"id\":\"stars_50\",\"name\":\"50 Stars\",\"amount\":50,\"drxCost\":500,\"popular\":true,\"bonus\":5,\"description\":\"Popular choice\",\"image\":\"https://i.ibb.co/tMSTSQHf/images-3.jpg\"},{\"id\":\"stars_100\",\"name\":\"100 Stars\",\"amount\":100,\"drxCost\":1000,\"popular\":false,\"bonus\":10,\"description\":\"Great value\",\"image\":\"https://i.ibb.co/tMSTSQHf/images-3.jpg\"},{\"id\":\"stars_500\",\"name\":\"500 Stars\",\"amount\":500,\"drxCost\":5000,\"popular\":true,\"bonus\":50,\"description\":\"Best value\",\"image\":\"https://i.ibb.co/tMSTSQHf/images-3.jpg\"},{\"id\":\"stars_1000\",\"name\":\"1000 Stars\",\"amount\":1000,\"drxCost\":10000,\"popular\":false,\"bonus\":100,\"description\":\"Premium package\",\"image\":\"https://i.ibb.co/tMSTSQHf/images-3.jpg\"}]',
+            2,
+            5,
+            32
+        )");
+        
+        // Insert mega admin
+        $db->exec("INSERT IGNORE INTO admins (adminId, addedBy, addedAt) VALUES ('6547102814', 'system', NOW())");
+        
+        error_log("Database tables initialized successfully");
+    } catch (Exception $e) {
+        error_log("Failed to initialize tables: " . $e->getMessage());
+        throw $e;
+    }
 }
 
-// Initialize tables on first run
-initializeTables();
+// Auto-initialize tables on first run
+try {
+    initializeTables();
+} catch (Exception $e) {
+    error_log("Database initialization failed: " . $e->getMessage());
+}
 ?>

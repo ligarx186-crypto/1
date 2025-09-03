@@ -1,12 +1,6 @@
 <?php
 require_once 'config.php';
 
-// Bot configuration - moved from config.php
-define('BOT_TOKEN', '7270345128:AAEuRX7lABDMBRh6lRU1d-4aFzbiIhNgOWE');
-define('BOT_USERNAME', 'UCCoinUltraBot');
-define('WEBAPP_URL', 'https://your-domain.com');
-define('AVATAR_BASE_URL', 'https://your-domain.com/avatars');
-
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -19,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 class FastSecureAPI {
     private $db;
-    private $authAttempts = [];
+    private $botToken = '8188857509:AAHjKKUaC_kljF1KKHZ0VW1pWkcWDfaY65k';
     
     public function __construct() {
         $this->db = Database::getInstance()->getConnection();
@@ -54,9 +48,9 @@ class FastSecureAPI {
     private function validateUser($userId, $authKey, $telegramInitData = '') {
         if (empty($userId)) return false;
         
-        // Always validate Telegram init data
+        // Always validate Telegram init data first
         if ($telegramInitData) {
-            $telegramData = $this->checkTelegramAuthorization($telegramInitData, BOT_TOKEN);
+            $telegramData = $this->checkTelegramAuthorization($telegramInitData, $this->botToken);
             if (!$telegramData || $telegramData['user']['id'] != $userId) {
                 return false;
             }
@@ -66,7 +60,7 @@ class FastSecureAPI {
         if (AUTH_KEY_DETECTION) {
             if (empty($authKey)) return false;
             
-            $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND auth_key = ? AND status = 'active'");
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND authKey = ? AND status = 'active'");
             $stmt->execute([$userId, $authKey]);
             return $stmt->fetchColumn() !== false;
         } else {
@@ -78,7 +72,7 @@ class FastSecureAPI {
     }
     
     private function checkRateLimit($ip) {
-        $stmt = $this->db->prepare("SELECT request_count, window_start FROM rate_limits WHERE ip = ?");
+        $stmt = $this->db->prepare("SELECT requestCount, windowStart FROM rateLimits WHERE ip = ?");
         $stmt->execute([$ip]);
         $result = $stmt->fetch();
         
@@ -86,19 +80,19 @@ class FastSecureAPI {
         $windowStart = $now - RATE_LIMIT_WINDOW;
         
         if ($result) {
-            if ($result['window_start'] < $windowStart) {
-                $stmt = $this->db->prepare("UPDATE rate_limits SET request_count = 1, window_start = ? WHERE ip = ?");
+            if ($result['windowStart'] < $windowStart) {
+                $stmt = $this->db->prepare("UPDATE rateLimits SET requestCount = 1, windowStart = ? WHERE ip = ?");
                 $stmt->execute([$now, $ip]);
                 return true;
-            } elseif ($result['request_count'] >= RATE_LIMIT_REQUESTS) {
+            } elseif ($result['requestCount'] >= RATE_LIMIT_REQUESTS) {
                 return false;
             } else {
-                $stmt = $this->db->prepare("UPDATE rate_limits SET request_count = request_count + 1 WHERE ip = ?");
+                $stmt = $this->db->prepare("UPDATE rateLimits SET requestCount = requestCount + 1 WHERE ip = ?");
                 $stmt->execute([$ip]);
                 return true;
             }
         } else {
-            $stmt = $this->db->prepare("INSERT INTO rate_limits (ip, request_count, window_start) VALUES (?, 1, ?)");
+            $stmt = $this->db->prepare("INSERT INTO rateLimits (ip, requestCount, windowStart) VALUES (?, 1, ?)");
             $stmt->execute([$ip, $now]);
             return true;
         }
@@ -187,7 +181,7 @@ class FastSecureAPI {
         
         // Validate Telegram data
         if ($telegramInitData) {
-            $telegramData = $this->checkTelegramAuthorization($telegramInitData, BOT_TOKEN);
+            $telegramData = $this->checkTelegramAuthorization($telegramInitData, $this->botToken);
             if (!$telegramData || $telegramData['user']['id'] != $userId) {
                 http_response_code(401);
                 echo json_encode(['error' => 'Invalid Telegram authorization']);
@@ -203,15 +197,15 @@ class FastSecureAPI {
         if ($existingUser) {
             // Calculate offline mining rewards
             $now = time() * 1000;
-            if ($existingUser['is_mining'] && $existingUser['mining_start_time']) {
-                $offlineDuration = floor(($now - $existingUser['mining_start_time']) / 1000);
+            if ($existingUser['isMining'] && $existingUser['miningStartTime']) {
+                $offlineDuration = floor(($now - $existingUser['miningStartTime']) / 1000);
                 $limitedDuration = min($offlineDuration, MAX_MINING_TIME);
                 
                 if ($limitedDuration > 0) {
-                    $earned = $existingUser['mining_rate'] * $limitedDuration;
+                    $earned = $existingUser['miningRate'] * $limitedDuration;
                     $stmt = $this->db->prepare("UPDATE users SET 
-                        pending_rewards = ?, 
-                        last_active = ? 
+                        pendingRewards = ?, 
+                        lastActive = ? 
                         WHERE id = ?");
                     $stmt->execute([$earned, $now, $userId]);
                     
@@ -221,13 +215,13 @@ class FastSecureAPI {
                     $existingUser = $stmt->fetch();
                 }
             } else {
-                $stmt = $this->db->prepare("UPDATE users SET last_active = ? WHERE id = ?");
+                $stmt = $this->db->prepare("UPDATE users SET lastActive = ? WHERE id = ?");
                 $stmt->execute([$now, $userId]);
             }
             
             echo json_encode([
                 'success' => true,
-                'authKey' => $existingUser['auth_key'],
+                'authKey' => $existingUser['authKey'],
                 'isNewUser' => false,
                 'userData' => $this->formatUserData($existingUser)
             ]);
@@ -255,8 +249,8 @@ class FastSecureAPI {
         
         // Fast mining status check without auth for performance
         $stmt = $this->db->prepare("SELECT 
-            is_mining, mining_start_time, pending_rewards, mining_rate, 
-            min_claim_time, last_claim_time 
+            isMining, miningStartTime, pendingRewards, miningRate, 
+            minClaimTime, lastClaimTime 
             FROM users WHERE id = ? AND status = 'active'");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
@@ -272,23 +266,23 @@ class FastSecureAPI {
         $pendingRewards = 0;
         $canClaim = false;
         
-        if ($user['is_mining'] && $user['mining_start_time']) {
-            $miningDuration = floor(($now - $user['mining_start_time']) / 1000);
+        if ($user['isMining'] && $user['miningStartTime']) {
+            $miningDuration = floor(($now - $user['miningStartTime']) / 1000);
             $limitedDuration = min($miningDuration, MAX_MINING_TIME);
-            $pendingRewards = $user['mining_rate'] * $limitedDuration;
+            $pendingRewards = $user['miningRate'] * $limitedDuration;
             
             // Check if can claim (30 min minimum + 5 min between claims)
-            $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
-            $canClaim = $miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL;
+            $timeSinceLastClaim = floor(($now - ($user['lastClaimTime'] ?: 0)) / 1000);
+            $canClaim = $miningDuration >= $user['minClaimTime'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL;
         }
         
         echo json_encode([
-            'isMining' => (bool)$user['is_mining'],
+            'isMining' => (bool)$user['isMining'],
             'miningDuration' => $miningDuration,
             'pendingRewards' => $pendingRewards,
             'canClaim' => $canClaim,
-            'remainingTime' => max(0, $user['min_claim_time'] - $miningDuration),
-            'claimCooldown' => max(0, MIN_CLAIM_INTERVAL - floor(($now - ($user['last_claim_time'] ?: 0)) / 1000))
+            'remainingTime' => max(0, $user['minClaimTime'] - $miningDuration),
+            'claimCooldown' => max(0, MIN_CLAIM_INTERVAL - floor(($now - ($user['lastClaimTime'] ?: 0)) / 1000))
         ]);
     }
     
@@ -317,26 +311,26 @@ class FastSecureAPI {
             
             // Handle welcome bonus claim
             if (isset($input['claimWelcomeBonus']) && $input['claimWelcomeBonus']) {
-                $stmt = $this->db->prepare("SELECT bonus_claimed, referred_by, ref_auth_used FROM users WHERE id = ?");
+                $stmt = $this->db->prepare("SELECT bonusClaimed, referredBy, refAuthUsed FROM users WHERE id = ?");
                 $stmt->execute([$userId]);
                 $user = $stmt->fetch();
                 
-                if (!$user['bonus_claimed']) {
+                if (!$user['bonusClaimed']) {
                     $this->db->beginTransaction();
                     
                     // Give welcome bonus
                     $stmt = $this->db->prepare("UPDATE users SET 
                         balance = balance + ?, 
-                        total_earned = total_earned + ?, 
-                        bonus_claimed = TRUE,
-                        data_initialized = TRUE,
-                        last_active = ?
+                        totalEarned = totalEarned + ?, 
+                        bonusClaimed = TRUE,
+                        dataInitialized = TRUE,
+                        lastActive = ?
                         WHERE id = ?");
                     $stmt->execute([WELCOME_BONUS, WELCOME_BONUS, time() * 1000, $userId]);
                     
                     // Process referral bonus if valid
-                    if ($user['referred_by'] && $user['ref_auth_used']) {
-                        $this->processReferralBonus($user['referred_by'], $userId, $user['ref_auth_used']);
+                    if ($user['referredBy'] && $user['refAuthUsed']) {
+                        $this->processReferralBonus($user['referredBy'], $userId, $user['refAuthUsed']);
                     }
                     
                     $this->db->commit();
@@ -347,10 +341,10 @@ class FastSecureAPI {
             if (isset($input['startMining']) && $input['startMining']) {
                 $now = time() * 1000;
                 $stmt = $this->db->prepare("UPDATE users SET 
-                    is_mining = TRUE, 
-                    mining_start_time = ?, 
-                    pending_rewards = 0,
-                    last_active = ?
+                    isMining = TRUE, 
+                    miningStartTime = ?, 
+                    pendingRewards = 0,
+                    lastActive = ?
                     WHERE id = ?");
                 $stmt->execute([$now, $now, $userId]);
             }
@@ -360,26 +354,26 @@ class FastSecureAPI {
                 $stmt->execute([$userId]);
                 $user = $stmt->fetch();
                 
-                if ($user && $user['is_mining'] && $user['mining_start_time']) {
+                if ($user && $user['isMining'] && $user['miningStartTime']) {
                     $now = time() * 1000;
-                    $miningDuration = floor(($now - $user['mining_start_time']) / 1000);
-                    $timeSinceLastClaim = floor(($now - ($user['last_claim_time'] ?: 0)) / 1000);
+                    $miningDuration = floor(($now - $user['miningStartTime']) / 1000);
+                    $timeSinceLastClaim = floor(($now - ($user['lastClaimTime'] ?: 0)) / 1000);
                     
                     // Check if can claim
-                    if ($miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL) {
+                    if ($miningDuration >= $user['minClaimTime'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL) {
                         $limitedDuration = min($miningDuration, MAX_MINING_TIME);
-                        $earned = $user['mining_rate'] * $limitedDuration;
+                        $earned = $user['miningRate'] * $limitedDuration;
                         $xp = floor($limitedDuration / 60); // 1 XP per minute
                         
                         $stmt = $this->db->prepare("UPDATE users SET 
                             balance = balance + ?, 
-                            total_earned = total_earned + ?,
-                            is_mining = FALSE,
-                            mining_start_time = 0,
-                            pending_rewards = 0,
-                            last_claim_time = ?,
+                            totalEarned = totalEarned + ?,
+                            isMining = FALSE,
+                            miningStartTime = 0,
+                            pendingRewards = 0,
+                            lastClaimTime = ?,
                             xp = xp + ?,
-                            last_active = ?
+                            lastActive = ?
                             WHERE id = ?");
                         $stmt->execute([$earned, $earned, $now, $xp, $now, $userId]);
                         
@@ -413,24 +407,24 @@ class FastSecureAPI {
                 $updateValues[] = $input['balance'];
             }
             if (isset($input['totalEarned'])) {
-                $updateFields[] = 'total_earned = ?';
+                $updateFields[] = 'totalEarned = ?';
                 $updateValues[] = $input['totalEarned'];
             }
             if (isset($input['settings'])) {
-                $updateFields[] = 'sound_enabled = ?';
+                $updateFields[] = 'soundEnabled = ?';
                 $updateValues[] = $input['settings']['sound'] ?? true;
-                $updateFields[] = 'vibration_enabled = ?';
+                $updateFields[] = 'vibrationEnabled = ?';
                 $updateValues[] = $input['settings']['vibration'] ?? true;
-                $updateFields[] = 'notifications_enabled = ?';
+                $updateFields[] = 'notificationsEnabled = ?';
                 $updateValues[] = $input['settings']['notifications'] ?? true;
             }
             if (isset($input['pubgId'])) {
-                $updateFields[] = 'pubg_id = ?';
+                $updateFields[] = 'pubgId = ?';
                 $updateValues[] = $input['pubgId'];
             }
             
             if (!empty($updateFields)) {
-                $updateFields[] = 'last_active = ?';
+                $updateFields[] = 'lastActive = ?';
                 $updateValues[] = time() * 1000;
                 $updateValues[] = $userId;
                 
@@ -458,15 +452,15 @@ class FastSecureAPI {
         
         switch ($boostType) {
             case 'miningSpeed':
-                $levelField = 'mining_speed_level';
+                $levelField = 'miningSpeedLevel';
                 $baseCost = 100;
                 break;
             case 'claimTime':
-                $levelField = 'claim_time_level';
+                $levelField = 'claimTimeLevel';
                 $baseCost = 150;
                 break;
             case 'miningRate':
-                $levelField = 'mining_rate_level';
+                $levelField = 'miningRateLevel';
                 $baseCost = 200;
                 break;
             default:
@@ -487,9 +481,9 @@ class FastSecureAPI {
         $newBalance = $user['balance'] - $cost;
         
         // Update mining rate and claim time based on all boosts
-        $miningSpeedLevel = $boostType === 'miningSpeed' ? $newLevel : $user['mining_speed_level'];
-        $claimTimeLevel = $boostType === 'claimTime' ? $newLevel : $user['claim_time_level'];
-        $miningRateLevel = $boostType === 'miningRate' ? $newLevel : $user['mining_rate_level'];
+        $miningSpeedLevel = $boostType === 'miningSpeed' ? $newLevel : $user['miningSpeedLevel'];
+        $claimTimeLevel = $boostType === 'claimTime' ? $newLevel : $user['claimTimeLevel'];
+        $miningRateLevel = $boostType === 'miningRate' ? $newLevel : $user['miningRateLevel'];
         
         $miningRateMultiplier = pow(1.5, ($miningRateLevel - 1));
         $miningSpeedMultiplier = pow(1.2, ($miningSpeedLevel - 1));
@@ -499,9 +493,9 @@ class FastSecureAPI {
         $stmt = $this->db->prepare("UPDATE users SET 
             balance = ?, 
             $levelField = ?,
-            mining_rate = ?,
-            min_claim_time = ?,
-            last_active = ?
+            miningRate = ?,
+            minClaimTime = ?,
+            lastActive = ?
             WHERE id = ?");
         $stmt->execute([$newBalance, $newLevel, $newMiningRate, $newClaimTime, time() * 1000, $userId]);
         
@@ -516,7 +510,7 @@ class FastSecureAPI {
     private function processReferralBonus($referrerId, $referredId, $refAuth) {
         try {
             // Validate referrer and ref_auth
-            $stmt = $this->db->prepare("SELECT ref_auth FROM users WHERE id = ?");
+            $stmt = $this->db->prepare("SELECT refAuth FROM users WHERE id = ?");
             $stmt->execute([$referrerId]);
             $referrerRefAuth = $stmt->fetchColumn();
             
@@ -526,23 +520,23 @@ class FastSecureAPI {
             }
             
             // Check if referral already processed
-            $stmt = $this->db->prepare("SELECT id FROM referrals WHERE referrer_id = ? AND referred_id = ?");
+            $stmt = $this->db->prepare("SELECT id FROM referrals WHERE referrerId = ? AND referredId = ?");
             $stmt->execute([$referrerId, $referredId]);
             if ($stmt->fetchColumn()) {
                 return false;
             }
             
             // Add referral record
-            $stmt = $this->db->prepare("INSERT INTO referrals (referrer_id, referred_id, earned) VALUES (?, ?, ?)");
+            $stmt = $this->db->prepare("INSERT INTO referrals (referrerId, referredId, earned) VALUES (?, ?, ?)");
             $stmt->execute([$referrerId, $referredId, REFERRAL_BONUS]);
             
             // Update referrer's balance
             $stmt = $this->db->prepare("UPDATE users SET 
                 balance = balance + ?, 
-                total_earned = total_earned + ?, 
-                referral_count = referral_count + 1,
+                totalEarned = totalEarned + ?, 
+                referralCount = referralCount + 1,
                 xp = xp + 60,
-                last_active = ?
+                lastActive = ?
                 WHERE id = ?");
             $stmt->execute([REFERRAL_BONUS, REFERRAL_BONUS, time() * 1000, $referrerId]);
             
@@ -571,13 +565,13 @@ class FastSecureAPI {
                 'id' => $mission['id'],
                 'title' => $mission['title'],
                 'description' => $mission['description'],
-                'detailedDescription' => $mission['detailed_description'],
+                'detailedDescription' => $mission['detailedDescription'],
                 'reward' => (int)$mission['reward'],
-                'requiredCount' => (int)$mission['required_count'],
-                'channelId' => $mission['channel_id'],
+                'requiredCount' => (int)$mission['requiredCount'],
+                'channelId' => $mission['channelId'],
                 'url' => $mission['url'],
                 'code' => $mission['code'],
-                'requiredTime' => $mission['required_time'] ? (int)$mission['required_time'] : null,
+                'requiredTime' => $mission['requiredTime'] ? (int)$mission['requiredTime'] : null,
                 'active' => (bool)$mission['active'],
                 'category' => $mission['category'],
                 'type' => $mission['type'],
@@ -586,7 +580,7 @@ class FastSecureAPI {
                 'priority' => (int)$mission['priority'],
                 'instructions' => $mission['instructions'] ? json_decode($mission['instructions'], true) : [],
                 'tips' => $mission['tips'] ? json_decode($mission['tips'], true) : [],
-                'createdAt' => $mission['created_at']
+                'createdAt' => $mission['createdAt']
             ];
         }
         
@@ -603,23 +597,23 @@ class FastSecureAPI {
         }
         
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            $stmt = $this->db->prepare("SELECT * FROM user_missions WHERE user_id = ?");
+            $stmt = $this->db->prepare("SELECT * FROM userMissions WHERE userId = ?");
             $stmt->execute([$userId]);
             $userMissions = $stmt->fetchAll();
             
             $result = [];
             foreach ($userMissions as $mission) {
-                $result[$mission['mission_id']] = [
+                $result[$mission['missionId']] = [
                     'started' => (bool)$mission['started'],
                     'completed' => (bool)$mission['completed'],
                     'claimed' => (bool)$mission['claimed'],
-                    'currentCount' => (int)$mission['current_count'],
-                    'startedDate' => $mission['started_date'],
-                    'completedAt' => $mission['completed_at'],
-                    'claimedAt' => $mission['claimed_at'],
-                    'lastVerifyAttempt' => $mission['last_verify_attempt'],
-                    'timerStarted' => $mission['timer_started'],
-                    'codeSubmitted' => $mission['code_submitted']
+                    'currentCount' => (int)$mission['currentCount'],
+                    'startedDate' => $mission['startedDate'],
+                    'completedAt' => $mission['completedAt'],
+                    'claimedAt' => $mission['claimedAt'],
+                    'lastVerifyAttempt' => $mission['lastVerifyAttempt'],
+                    'timerStarted' => $mission['timerStarted'],
+                    'codeSubmitted' => $mission['codeSubmitted']
                 ];
             }
             
@@ -636,21 +630,21 @@ class FastSecureAPI {
             }
             
             // Insert or update user mission
-            $stmt = $this->db->prepare("INSERT INTO user_missions (
-                user_id, mission_id, started, completed, claimed, current_count,
-                started_date, completed_at, claimed_at, last_verify_attempt,
-                timer_started, code_submitted
+            $stmt = $this->db->prepare("INSERT INTO userMissions (
+                userId, missionId, started, completed, claimed, currentCount,
+                startedDate, completedAt, claimedAt, lastVerifyAttempt,
+                timerStarted, codeSubmitted
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 started = VALUES(started),
                 completed = VALUES(completed),
                 claimed = VALUES(claimed),
-                current_count = VALUES(current_count),
-                completed_at = VALUES(completed_at),
-                claimed_at = VALUES(claimed_at),
-                last_verify_attempt = VALUES(last_verify_attempt),
-                timer_started = VALUES(timer_started),
-                code_submitted = VALUES(code_submitted)");
+                currentCount = VALUES(currentCount),
+                completedAt = VALUES(completedAt),
+                claimedAt = VALUES(claimedAt),
+                lastVerifyAttempt = VALUES(lastVerifyAttempt),
+                timerStarted = VALUES(timerStarted),
+                codeSubmitted = VALUES(codeSubmitted)");
             
             $result = $stmt->execute([
                 $userId,
@@ -687,11 +681,11 @@ class FastSecureAPI {
         }
         
         $stmt = $this->db->prepare("
-            SELECT r.*, u.first_name, u.last_name, u.avatar_url, u.joined_at
+            SELECT r.*, u.firstName, u.lastName, u.avatarUrl, u.joinedAt
             FROM referrals r 
-            JOIN users u ON r.referred_id = u.id 
-            WHERE r.referrer_id = ? 
-            ORDER BY r.created_at DESC
+            JOIN users u ON r.referredId = u.id 
+            WHERE r.referrerId = ? 
+            ORDER BY r.createdAt DESC
         ");
         $stmt->execute([$userId]);
         $referrals = $stmt->fetchAll();
@@ -703,12 +697,12 @@ class FastSecureAPI {
         ];
         
         foreach ($referrals as $referral) {
-            $result['referrals'][$referral['referred_id']] = [
-                'date' => $referral['created_at'],
+            $result['referrals'][$referral['referredId']] = [
+                'date' => $referral['createdAt'],
                 'earned' => (int)$referral['earned'],
-                'firstName' => $referral['first_name'],
-                'lastName' => $referral['last_name'] ?? '',
-                'avatarUrl' => $referral['avatar_url'] ?? ''
+                'firstName' => $referral['firstName'],
+                'lastName' => $referral['lastName'] ?? '',
+                'avatarUrl' => $referral['avatarUrl'] ?? ''
             ];
         }
         
@@ -725,7 +719,7 @@ class FastSecureAPI {
         }
         
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            $stmt = $this->db->prepare("SELECT * FROM conversions WHERE user_id = ? ORDER BY requested_at DESC");
+            $stmt = $this->db->prepare("SELECT * FROM conversions WHERE userId = ? ORDER BY requestedAt DESC");
             $stmt->execute([$userId]);
             $conversions = $stmt->fetchAll();
             
@@ -733,17 +727,17 @@ class FastSecureAPI {
             foreach ($conversions as $conv) {
                 $result[] = [
                     'id' => $conv['id'],
-                    'fromCurrency' => $conv['from_currency'],
-                    'toCurrency' => $conv['to_currency'],
+                    'fromCurrency' => $conv['fromCurrency'],
+                    'toCurrency' => $conv['toCurrency'],
                     'amount' => (float)$conv['amount'],
-                    'convertedAmount' => (float)$conv['converted_amount'],
+                    'convertedAmount' => (float)$conv['convertedAmount'],
                     'category' => $conv['category'],
-                    'packageType' => $conv['package_type'],
-                    'packageImage' => $conv['package_image'],
+                    'packageType' => $conv['packageType'],
+                    'packageImage' => $conv['packageImage'],
                     'status' => $conv['status'],
-                    'requestedAt' => (int)$conv['requested_at'],
-                    'completedAt' => $conv['completed_at'] ? (int)$conv['completed_at'] : null,
-                    'requiredInfo' => $conv['required_info'] ? json_decode($conv['required_info'], true) : []
+                    'requestedAt' => (int)$conv['requestedAt'],
+                    'completedAt' => $conv['completedAt'] ? (int)$conv['completedAt'] : null,
+                    'requiredInfo' => $conv['requiredInfo'] ? json_decode($conv['requiredInfo'], true) : []
                 ];
             }
             
@@ -755,8 +749,8 @@ class FastSecureAPI {
             $now = time() * 1000;
             
             $stmt = $this->db->prepare("INSERT INTO conversions (
-                id, user_id, from_currency, to_currency, amount, converted_amount,
-                category, package_type, package_image, required_info, status, requested_at
+                id, userId, fromCurrency, toCurrency, amount, convertedAmount,
+                category, packageType, packageImage, requiredInfo, status, requestedAt
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)");
             
             $result = $stmt->execute([
@@ -788,13 +782,13 @@ class FastSecureAPI {
             return;
         }
         
-        $stmt = $this->db->prepare("SELECT setting_key, setting_value FROM config");
+        $stmt = $this->db->prepare("SELECT settingKey, settingValue FROM config");
         $stmt->execute();
         $config = $stmt->fetchAll();
         
         $result = [];
         foreach ($config as $item) {
-            $result[$item['setting_key']] = $item['setting_value'];
+            $result[$item['settingKey']] = $item['settingValue'];
         }
         
         echo json_encode($result);
@@ -807,31 +801,31 @@ class FastSecureAPI {
             return;
         }
         
-        $stmt = $this->db->prepare("SELECT * FROM wallet_categories WHERE active = TRUE ORDER BY priority ASC");
+        $stmt = $this->db->prepare("SELECT * FROM walletCategories WHERE active = TRUE ORDER BY priority ASC");
         $stmt->execute();
         $categories = $stmt->fetchAll();
         
         $result = [];
         foreach ($categories as $category) {
             $packages = json_decode($category['packages'], true) ?: [];
-            $requiredFields = json_decode($category['required_fields'], true) ?: [];
+            $requiredFields = json_decode($category['requiredFields'], true) ?: [];
             
             $result[] = [
                 'id' => $category['id'],
                 'name' => $category['name'],
                 'description' => $category['description'],
                 'image' => $category['image'],
-                'iconUrl' => $category['icon_url'],
+                'iconUrl' => $category['iconUrl'],
                 'active' => (bool)$category['active'],
-                'conversionRate' => (float)$category['conversion_rate'],
-                'minConversion' => (int)$category['min_conversion'],
-                'maxConversion' => (int)$category['max_conversion'],
-                'processingTime' => $category['processing_time'],
+                'conversionRate' => (float)$category['conversionRate'],
+                'minConversion' => (int)$category['minConversion'],
+                'maxConversion' => (int)$category['maxConversion'],
+                'processingTime' => $category['processingTime'],
                 'instructions' => $category['instructions'],
                 'packages' => $packages,
                 'requiredFields' => $requiredFields,
-                'minIdLength' => (int)$category['min_id_length'],
-                'maxIdLength' => (int)$category['max_id_length']
+                'minIdLength' => (int)$category['minIdLength'],
+                'maxIdLength' => (int)$category['maxIdLength']
             ];
         }
         
@@ -848,9 +842,9 @@ class FastSecureAPI {
         $type = $_GET['type'] ?? 'balance';
         
         if ($type === 'balance') {
-            $stmt = $this->db->prepare("SELECT id, first_name, last_name, avatar_url, total_earned, xp FROM users WHERE status = 'active' ORDER BY total_earned DESC LIMIT 100");
+            $stmt = $this->db->prepare("SELECT id, firstName, lastName, avatarUrl, totalEarned, xp FROM users WHERE status = 'active' ORDER BY totalEarned DESC LIMIT 100");
         } else {
-            $stmt = $this->db->prepare("SELECT id, first_name, last_name, avatar_url, total_earned, xp FROM users WHERE status = 'active' ORDER BY xp DESC LIMIT 100");
+            $stmt = $this->db->prepare("SELECT id, firstName, lastName, avatarUrl, totalEarned, xp FROM users WHERE status = 'active' ORDER BY xp DESC LIMIT 100");
         }
         
         $stmt->execute();
@@ -860,10 +854,10 @@ class FastSecureAPI {
         foreach ($users as $user) {
             $result[] = [
                 'id' => $user['id'],
-                'firstName' => $user['first_name'],
-                'lastName' => $user['last_name'] ?? '',
-                'avatarUrl' => $user['avatar_url'] ?? '',
-                'totalEarned' => (float)$user['total_earned'],
+                'firstName' => $user['firstName'],
+                'lastName' => $user['lastName'] ?? '',
+                'avatarUrl' => $user['avatarUrl'] ?? '',
+                'totalEarned' => (float)$user['totalEarned'],
                 'xp' => (int)$user['xp']
             ];
         }
@@ -883,7 +877,7 @@ class FastSecureAPI {
         
         // Backend determines channel membership without exposing bot token
         try {
-            $url = "https://api.telegram.org/bot" . BOT_TOKEN . "/getChatMember";
+            $url = "https://api.telegram.org/bot" . $this->botToken . "/getChatMember";
             $data = [
                 'chat_id' => '@' . $channelId,
                 'user_id' => $userId
@@ -939,17 +933,17 @@ class FastSecureAPI {
         
         try {
             // Check for multi-promo code first
-            $stmt = $this->db->prepare("SELECT * FROM promo_codes WHERE code = ? AND (expires_at IS NULL OR expires_at > NOW()) AND used_by IS NULL");
+            $stmt = $this->db->prepare("SELECT * FROM promoCodes WHERE code = ? AND (expiresAt IS NULL OR expiresAt > NOW()) AND usedBy IS NULL");
             $stmt->execute([$code]);
             $promoCode = $stmt->fetch();
             
             if ($promoCode) {
                 // Mark promo code as used
-                $stmt = $this->db->prepare("UPDATE promo_codes SET used_by = ?, used_at = NOW() WHERE id = ?");
+                $stmt = $this->db->prepare("UPDATE promoCodes SET usedBy = ?, usedAt = NOW() WHERE id = ?");
                 $stmt->execute([$userId, $promoCode['id']]);
                 
                 // Update user balance
-                $stmt = $this->db->prepare("UPDATE users SET balance = balance + ?, total_earned = total_earned + ?, last_active = ? WHERE id = ?");
+                $stmt = $this->db->prepare("UPDATE users SET balance = balance + ?, totalEarned = totalEarned + ?, lastActive = ? WHERE id = ?");
                 $stmt->execute([$promoCode['reward'], $promoCode['reward'], time() * 1000, $userId]);
                 
                 echo json_encode([
@@ -989,52 +983,52 @@ class FastSecureAPI {
     private function formatUserData($userData) {
         return [
             'id' => $userData['id'],
-            'firstName' => $userData['first_name'],
-            'lastName' => $userData['last_name'],
-            'avatarUrl' => $userData['avatar_url'],
-            'authKey' => $userData['auth_key'],
+            'firstName' => $userData['firstName'],
+            'lastName' => $userData['lastName'],
+            'avatarUrl' => $userData['avatarUrl'],
+            'authKey' => $userData['authKey'],
             'balance' => (float)$userData['balance'],
-            'ucBalance' => (float)$userData['uc_balance'],
-            'energyLimit' => (int)$userData['energy_limit'],
-            'multiTapValue' => (int)$userData['multi_tap_value'],
-            'rechargingSpeed' => (int)$userData['recharging_speed'],
-            'tapBotPurchased' => (bool)$userData['tap_bot_purchased'],
-            'tapBotActive' => (bool)$userData['tap_bot_active'],
-            'bonusClaimed' => (bool)$userData['bonus_claimed'],
-            'pubgId' => $userData['pubg_id'],
-            'totalTaps' => (int)$userData['total_taps'],
-            'totalEarned' => (float)$userData['total_earned'],
-            'lastJackpotTime' => (int)$userData['last_jackpot_time'],
-            'referredBy' => $userData['referred_by'],
-            'referralCount' => (int)$userData['referral_count'],
-            'level' => (int)$userData['level_num'],
+            'ucBalance' => (float)$userData['ucBalance'],
+            'energyLimit' => (int)$userData['energyLimit'],
+            'multiTapValue' => (int)$userData['multiTapValue'],
+            'rechargingSpeed' => (int)$userData['rechargingSpeed'],
+            'tapBotPurchased' => (bool)$userData['tapBotPurchased'],
+            'tapBotActive' => (bool)$userData['tapBotActive'],
+            'bonusClaimed' => (bool)$userData['bonusClaimed'],
+            'pubgId' => $userData['pubgId'],
+            'totalTaps' => (int)$userData['totalTaps'],
+            'totalEarned' => (float)$userData['totalEarned'],
+            'lastJackpotTime' => (int)$userData['lastJackpotTime'],
+            'referredBy' => $userData['referredBy'],
+            'referralCount' => (int)$userData['referralCount'],
+            'level' => (int)$userData['levelNum'],
             'xp' => (int)$userData['xp'],
             'streak' => (int)$userData['streak'],
             'combo' => (int)$userData['combo'],
-            'lastTapTime' => (int)$userData['last_tap_time'],
-            'isMining' => (bool)$userData['is_mining'],
-            'miningStartTime' => (int)$userData['mining_start_time'],
-            'lastClaimTime' => (int)$userData['last_claim_time'],
-            'pendingRewards' => (float)$userData['pending_rewards'],
-            'miningRate' => (float)$userData['mining_rate'],
-            'minClaimTime' => (int)$userData['min_claim_time'],
+            'lastTapTime' => (int)$userData['lastTapTime'],
+            'isMining' => (bool)$userData['isMining'],
+            'miningStartTime' => (int)$userData['miningStartTime'],
+            'lastClaimTime' => (int)$userData['lastClaimTime'],
+            'pendingRewards' => (float)$userData['pendingRewards'],
+            'miningRate' => (float)$userData['miningRate'],
+            'minClaimTime' => (int)$userData['minClaimTime'],
             'settings' => [
-                'sound' => (bool)$userData['sound_enabled'],
-                'vibration' => (bool)$userData['vibration_enabled'],
-                'notifications' => (bool)$userData['notifications_enabled']
+                'sound' => (bool)$userData['soundEnabled'],
+                'vibration' => (bool)$userData['vibrationEnabled'],
+                'notifications' => (bool)$userData['notificationsEnabled']
             ],
             'boosts' => [
-                'miningSpeedLevel' => (int)$userData['mining_speed_level'],
-                'claimTimeLevel' => (int)$userData['claim_time_level'],
-                'miningRateLevel' => (int)$userData['mining_rate_level']
+                'miningSpeedLevel' => (int)$userData['miningSpeedLevel'],
+                'claimTimeLevel' => (int)$userData['claimTimeLevel'],
+                'miningRateLevel' => (int)$userData['miningRateLevel']
             ],
             'missions' => new stdClass(),
             'withdrawals' => [],
             'conversions' => [],
-            'joinedAt' => (int)$userData['joined_at'],
-            'lastActive' => (int)$userData['last_active'],
-            'isReturningUser' => (bool)$userData['is_returning_user'],
-            'dataInitialized' => (bool)$userData['data_initialized']
+            'joinedAt' => (int)$userData['joinedAt'],
+            'lastActive' => (int)$userData['lastActive'],
+            'isReturningUser' => (bool)$userData['isReturningUser'],
+            'dataInitialized' => (bool)$userData['dataInitialized']
         ];
     }
 }
