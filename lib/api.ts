@@ -147,7 +147,7 @@ class APIService {
   
   async getBotUsername() {
     const config = await this.getConfig()
-    return config.bot_username || 'UCCoinUltraBot'
+    return config.bot_username || 'tanga'
   }
   
   async getBannerUrl() {

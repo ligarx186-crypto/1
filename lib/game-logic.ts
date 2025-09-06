@@ -6,7 +6,7 @@ export const GAME_CONFIG = {
   BASE_MINING_RATE: 0.001,
   WELCOME_BONUS: 100,
   MIN_CLAIM_TIME: 1800, // 30 minutes
-  MAX_MINING_TIME: 1800, // 30 minutes (not 39)
+  MAX_MINING_TIME: 1800, // 30 minutes (fixed from 39)
   MIN_CLAIM_INTERVAL: 300, // 5 minutes between claims
   MINING_SPEED_MULTIPLIER: 1.2,
   CLAIM_TIME_REDUCTION: 60,

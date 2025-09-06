@@ -92,13 +92,18 @@ export const useGameState = () => {
     try {
       telegram.init()
       const telegramUser = telegram.getUser()
-      const telegramInitData = telegram.webApp?.initDataUnsafe ? 
-        new URLSearchParams(telegram.webApp.initDataUnsafe as any).toString() : ''
+      
+      // Get Telegram init data properly
+      let telegramInitData = ''
+      if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+        telegramInitData = window.Telegram.WebApp.initData || ''
+      }
 
       const userId = getUrlParameter("id") || telegramUser?.id?.toString() || "user123"
       const authKey = getUrlParameter("authKey")
       
       if (!authKey) {
+        console.error('No auth key provided')
         return
       }
       
@@ -120,6 +125,13 @@ export const useGameState = () => {
       })
       
       if (!authResult.success) {
+        if (authResult.banned) {
+          // Show banned message
+          setUser({ ...defaultUserData, id: userId, authKey: '', banned: true })
+          setGameState((prev) => ({ ...prev, dataLoaded: true }))
+          setLoading(false)
+          return
+        }
         throw new Error('Authentication failed')
       }
 

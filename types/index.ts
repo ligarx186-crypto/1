@@ -4,24 +4,12 @@ export interface User {
   lastName?: string
   avatarUrl?: string
   balance: number // DRX balance
-  ucBalance: number // UC balance after conversion
-  energyLimit: number
-  multiTapValue: number
-  rechargingSpeed: number
-  tapBotPurchased: boolean
-  tapBotActive: boolean
   bonusClaimed: boolean
-  pubgId?: string
-  totalTaps: number
   totalEarned: number
-  lastJackpotTime: number
   referredBy?: string
   referralCount: number
   level: number
   xp: number
-  streak: number
-  combo: number
-  lastTapTime: number
   // Mining specific
   isMining: boolean
   miningStartTime: number
@@ -40,13 +28,13 @@ export interface User {
     miningRateLevel: number // replaces rechargeLevel
   }
   missions: Record<string, UserMission>
-  withdrawals: Withdrawal[]
   conversions: Conversion[]
   joinedAt: number
   lastActive: number
   isReturningUser: boolean
   dataInitialized: boolean
   authKey?: string
+  banned?: boolean
 }
 
 export interface Conversion {
