@@ -1,22 +1,16 @@
 <?php
 require_once 'backend/config.php';
 
-// Bot configuration
-$botToken = '8188857509:AAHjKKUaC_kljF1KKHZ0VW1pWkcWDfaY65k';
-$botUsername = 'tanga';
-$webAppUrl = 'https://your-domain.com';
-$avatarBaseUrl = 'http://c828.coresuz.ru/avatars';
-
 class TelegramBot {
     private $db;
     private $botToken;
     private $webAppUrl;
     private $avatarBaseUrl;
     
-    public function __construct($token, $webAppUrl, $avatarBaseUrl) {
-        $this->botToken = $token;
-        $this->webAppUrl = $webAppUrl;
-        $this->avatarBaseUrl = $avatarBaseUrl;
+    public function __construct() {
+        $this->botToken = BOT_TOKEN;
+        $this->webAppUrl = WEBAPP_URL;
+        $this->avatarBaseUrl = AVATAR_BASE_URL;
         $this->db = Database::getInstance()->getConnection();
     }
     
@@ -46,12 +40,20 @@ class TelegramBot {
                 'http' => [
                     'header' => "Content-type: application/x-www-form-urlencoded\r\n",
                     'method' => 'POST',
-                    'content' => http_build_query($data)
+                    'content' => http_build_query($data),
+                    'timeout' => 10
                 ]
             ];
             
             $context = stream_context_create($options);
-            return file_get_contents($url, false, $context);
+            $response = @file_get_contents($url, false, $context);
+            
+            if ($response === false) {
+                $this->logError("Failed to send message to $chatId");
+                return false;
+            }
+            
+            return $response;
         } catch (Exception $e) {
             $this->logError("Failed to send message to $chatId: " . $e->getMessage());
             return false;
@@ -93,68 +95,92 @@ class TelegramBot {
     }
     
     private function downloadAndSaveAvatar($userId, $avatarUrl) {
-        if (empty($avatarUrl)) return '';
+        if (empty($avatarUrl)) {
+            $this->log("No avatar URL provided for user $userId");
+            return '';
+        }
         
         try {
+            // Create avatars directory if it doesn't exist
             $avatarDir = dirname(__FILE__) . '/avatars/';
             if (!is_dir($avatarDir)) {
                 if (!mkdir($avatarDir, 0755, true)) {
-                    $this->logError("Failed to create avatar directory for user $userId");
+                    $this->logError("Failed to create avatar directory: $avatarDir");
                     return '';
                 }
+                $this->log("Created avatar directory: $avatarDir");
             }
             
             $avatarPath = $avatarDir . $userId . '.png';
-            
-            // Check if avatar already exists and URL hasn't changed
-            $stmt = $this->db->prepare("SELECT avatar_url FROM users WHERE id = ?");
-            $stmt->execute([$userId]);
-            $currentAvatarUrl = $stmt->fetchColumn();
-            
             $expectedUrl = $this->avatarBaseUrl . '/' . $userId . '.png';
-            if ($currentAvatarUrl && file_exists($avatarPath) && $currentAvatarUrl === $expectedUrl) {
-                return $currentAvatarUrl; // Avatar already exists and hasn't changed
+            
+            // Check if avatar already exists
+            if (file_exists($avatarPath)) {
+                $this->log("Avatar already exists for user $userId");
+                return $expectedUrl;
             }
             
-            // Download avatar with error handling
+            // Download avatar with proper error handling
             $context = stream_context_create([
                 'http' => [
-                    'timeout' => 10,
-                    'user_agent' => 'Mozilla/5.0 (compatible; TelegramBot/1.0)'
+                    'timeout' => 15,
+                    'user_agent' => 'Mozilla/5.0 (compatible; TelegramBot/1.0)',
+                    'follow_location' => true,
+                    'max_redirects' => 3
                 ]
             ]);
             
             $avatarContent = @file_get_contents($avatarUrl, false, $context);
             
-            if ($avatarContent !== false) {
-                if (file_put_contents($avatarPath, $avatarContent)) {
-                    $this->log("Avatar saved for user $userId");
-                    return $expectedUrl;
-                } else {
-                    $this->logError("Failed to save avatar file for user $userId");
-                }
-            } else {
-                $this->logError("Failed to download avatar from $avatarUrl for user $userId");
+            if ($avatarContent === false) {
+                $this->logError("Failed to download avatar from: $avatarUrl for user $userId");
+                return '';
             }
+            
+            // Validate image content
+            if (strlen($avatarContent) < 100) {
+                $this->logError("Invalid avatar content (too small) for user $userId");
+                return '';
+            }
+            
+            // Save avatar
+            if (file_put_contents($avatarPath, $avatarContent) === false) {
+                $this->logError("Failed to save avatar file: $avatarPath for user $userId");
+                return '';
+            }
+            
+            // Set proper permissions
+            chmod($avatarPath, 0644);
+            
+            $this->log("Avatar successfully saved for user $userId");
+            return $expectedUrl;
+            
         } catch (Exception $e) {
             $this->logError("Avatar download exception for user $userId: " . $e->getMessage());
+            return '';
         }
-        
-        return '';
     }
     
     private function createUser($userData) {
         $authKey = $this->generateAuthKey();
-        $refAuth = $this->generateRefAuth();
+        $refAuth = '';
         $now = time() * 1000;
+        
+        // Only generate refAuth if user came through referral
+        if (!empty($userData['referred_by'])) {
+            $refAuth = $this->generateRefAuth();
+        }
         
         try {
             $this->db->beginTransaction();
             
-            // Download and save avatar only for new users
+            // Download and save avatar for new users
             $localAvatarUrl = '';
             if (!empty($userData['avatar_url'])) {
                 $localAvatarUrl = $this->downloadAndSaveAvatar($userData['id'], $userData['avatar_url']);
+                if (empty($localAvatarUrl)) {
+                    $this->log("Avatar download failed for user {$userData['id']}, continuing without avatar");
+                }
             }
             
             $stmt = $this->db->prepare("INSERT INTO users (
@@ -200,7 +226,9 @@ class TelegramBot {
     }
     
     private function updateUserAvatar($userId, $newAvatarUrl) {
-        if (empty($newAvatarUrl)) return;
+        if (empty($newAvatarUrl)) {
+            return;
+        }
         
         try {
             // Check if avatar has changed
@@ -214,8 +242,8 @@ class TelegramBot {
             if ($currentAvatarUrl !== $expectedUrl) {
                 $localAvatarUrl = $this->downloadAndSaveAvatar($userId, $newAvatarUrl);
                 if ($localAvatarUrl) {
-                    $stmt = $this->db->prepare("UPDATE users SET avatar_url = ? WHERE id = ?");
-                    $stmt->execute([$localAvatarUrl, $userId]);
+                    $stmt = $this->db->prepare("UPDATE users SET avatar_url = ?, last_active = ? WHERE id = ?");
+                    $stmt->execute([$localAvatarUrl, time() * 1000, $userId]);
                     $this->log("Avatar updated for user $userId");
                 }
             }
@@ -277,6 +305,12 @@ class TelegramBot {
                     $stmt = $this->db->prepare("SELECT ref_auth FROM users WHERE id = ?");
                     $stmt->execute([$refId]);
                     $refAuth = $stmt->fetchColumn();
+                    
+                    if (!$refAuth) {
+                        $this->log("Referrer not found or no ref_auth: $refId");
+                        $refId = null;
+                        $refAuth = null;
+                    }
                 }
             }
             
@@ -353,7 +387,7 @@ class TelegramBot {
                     [
                         [
                             'text' => '👥 Invite Friends',
-                            'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/{$this->botUsername}?start=ref_{$userId}"
+                            'switch_inline_query' => "🎮 Join DRX Mining and start earning!\n\n💎 Get welcome bonus\n⛏️ Mine to earn more DRX\n🎁 Complete missions for rewards\n\nJoin: https://t.me/" . BOT_USERNAME . "?start=ref_{$userId}"
                         ]
                     ]
                 ]
@@ -372,7 +406,7 @@ class TelegramBot {
                     'header' => "Content-type: application/x-www-form-urlencoded\r\n",
                     'method' => 'POST',
                     'content' => http_build_query($data),
-                    'timeout' => 10
+                    'timeout' => 15
                 ]
             ];
             
@@ -383,6 +417,8 @@ class TelegramBot {
                 $this->logError("Failed to send welcome photo to $chatId");
                 // Fallback to text message
                 $this->sendMessage($chatId, $text, $keyboard);
+            } else {
+                $this->log("Welcome message sent successfully to $chatId");
             }
         } catch (Exception $e) {
             $this->logError("Welcome message failed for chat $chatId: " . $e->getMessage());
@@ -488,7 +524,7 @@ class TelegramBot {
 // Handle webhook
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $bot = new TelegramBot($botToken, $webAppUrl, $avatarBaseUrl);
+        $bot = new TelegramBot();
         $bot->handleWebhook();
     } catch (Exception $e) {
         error_log("Bot webhook error: " . $e->getMessage());

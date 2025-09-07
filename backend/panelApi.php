@@ -112,80 +112,92 @@ class AdminPanelAPI {
             return;
         }
         
-        $now = time() * 1000;
-        $oneDayAgo = $now - (24 * 60 * 60 * 1000);
-        $oneWeekAgo = $now - (7 * 24 * 60 * 60 * 1000);
-        $oneMonthAgo = $now - (30 * 24 * 60 * 60 * 1000);
-        
-        // User statistics
-        $totalUsers = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        
-        $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE last_active >= ?");
-        $stmt->execute([$oneDayAgo]);
-        $activeToday = $stmt->fetchColumn();
-        
-        $stmt->execute([$oneWeekAgo]);
-        $activeWeek = $stmt->fetchColumn();
-        
-        $stmt->execute([$oneMonthAgo]);
-        $activeMonth = $stmt->fetchColumn();
-        
-        $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE joined_at >= ?");
-        $stmt->execute([$oneDayAgo]);
-        $newToday = $stmt->fetchColumn();
-        
-        // Conversion statistics
-        $totalConversions = $this->db->query("SELECT COUNT(*) FROM conversions")->fetchColumn();
-        $pendingConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'pending'")->fetchColumn();
-        $approvedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'approved'")->fetchColumn();
-        $rejectedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'rejected'")->fetchColumn();
-        
-        // Mining statistics
-        $activeMining = $this->db->query("SELECT COUNT(*) FROM users WHERE is_mining = TRUE")->fetchColumn();
-        $totalEarned = $this->db->query("SELECT SUM(total_earned) FROM users")->fetchColumn();
-        
-        // Mission statistics
-        $totalMissions = $this->db->query("SELECT COUNT(*) FROM missions WHERE active = TRUE")->fetchColumn();
-        $completedMissions = $this->db->query("SELECT COUNT(*) FROM user_missions WHERE completed = TRUE")->fetchColumn();
-        
-        // Promo code statistics
-        $totalPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes")->fetchColumn();
-        $usedPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes WHERE used_by IS NOT NULL")->fetchColumn();
-        
-        // Referral statistics
-        $totalReferrals = $this->db->query("SELECT COUNT(*) FROM referrals")->fetchColumn();
-        
-        echo json_encode([
-            'users' => [
-                'total' => (int)$totalUsers,
-                'activeToday' => (int)$activeToday,
-                'activeWeek' => (int)$activeWeek,
-                'activeMonth' => (int)$activeMonth,
-                'newToday' => (int)$newToday
-            ],
-            'conversions' => [
-                'total' => (int)$totalConversions,
-                'pending' => (int)$pendingConversions,
-                'approved' => (int)$approvedConversions,
-                'rejected' => (int)$rejectedConversions
-            ],
-            'mining' => [
-                'activeMining' => (int)$activeMining,
-                'totalEarned' => (float)$totalEarned
-            ],
-            'missions' => [
-                'total' => (int)$totalMissions,
-                'completed' => (int)$completedMissions
-            ],
-            'promoCodes' => [
-                'total' => (int)$totalPromoCodes,
-                'used' => (int)$usedPromoCodes,
-                'available' => (int)($totalPromoCodes - $usedPromoCodes)
-            ],
-            'referrals' => [
-                'total' => (int)$totalReferrals
-            ]
-        ]);
+        try {
+            $now = time() * 1000;
+            $oneDayAgo = $now - (24 * 60 * 60 * 1000);
+            $oneWeekAgo = $now - (7 * 24 * 60 * 60 * 1000);
+            $oneMonthAgo = $now - (30 * 24 * 60 * 60 * 1000);
+            
+            // User statistics
+            $totalUsers = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn() ?: 0;
+            
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE last_active >= ?");
+            $stmt->execute([$oneDayAgo]);
+            $activeToday = $stmt->fetchColumn() ?: 0;
+            
+            $stmt->execute([$oneWeekAgo]);
+            $activeWeek = $stmt->fetchColumn() ?: 0;
+            
+            $stmt->execute([$oneMonthAgo]);
+            $activeMonth = $stmt->fetchColumn() ?: 0;
+            
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE joined_at >= ?");
+            $stmt->execute([$oneDayAgo]);
+            $newToday = $stmt->fetchColumn() ?: 0;
+            
+            // Conversion statistics
+            $totalConversions = $this->db->query("SELECT COUNT(*) FROM conversions")->fetchColumn() ?: 0;
+            $pendingConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'pending'")->fetchColumn() ?: 0;
+            $approvedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'approved'")->fetchColumn() ?: 0;
+            $rejectedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'rejected'")->fetchColumn() ?: 0;
+            
+            // Mining statistics
+            $activeMining = $this->db->query("SELECT COUNT(*) FROM users WHERE is_mining = TRUE")->fetchColumn() ?: 0;
+            $totalEarned = $this->db->query("SELECT SUM(total_earned) FROM users")->fetchColumn() ?: 0;
+            
+            // Mission statistics
+            $totalMissions = $this->db->query("SELECT COUNT(*) FROM missions WHERE active = TRUE")->fetchColumn() ?: 0;
+            $completedMissions = $this->db->query("SELECT COUNT(*) FROM user_missions WHERE completed = TRUE")->fetchColumn() ?: 0;
+            
+            // Promo code statistics
+            $totalPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes")->fetchColumn() ?: 0;
+            $usedPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes WHERE used_by IS NOT NULL")->fetchColumn() ?: 0;
+            
+            // Referral statistics
+            $totalReferrals = $this->db->query("SELECT COUNT(*) FROM referrals")->fetchColumn() ?: 0;
+            
+            echo json_encode([
+                'users' => [
+                    'total' => (int)$totalUsers,
+                    'activeToday' => (int)$activeToday,
+                    'activeWeek' => (int)$activeWeek,
+                    'activeMonth' => (int)$activeMonth,
+                    'newToday' => (int)$newToday
+                ],
+                'conversions' => [
+                    'total' => (int)$totalConversions,
+                    'pending' => (int)$pendingConversions,
+                    'approved' => (int)$approvedConversions,
+                    'rejected' => (int)$rejectedConversions
+                ],
+                'mining' => [
+                    'activeMining' => (int)$activeMining,
+                    'totalEarned' => (float)$totalEarned
+                ],
+                'missions' => [
+                    'total' => (int)$totalMissions,
+                    'completed' => (int)$completedMissions
+                ],
+                'promoCodes' => [
+                    'total' => (int)$totalPromoCodes,
+                    'used' => (int)$usedPromoCodes,
+                    'available' => (int)($totalPromoCodes - $usedPromoCodes)
+                ],
+                'referrals' => [
+                    'total' => (int)$totalReferrals
+                ]
+            ]);
+        } catch (Exception $e) {
+            $this->log("Stats error: " . $e->getMessage());
+            echo json_encode([
+                'users' => ['total' => 0, 'activeToday' => 0, 'activeWeek' => 0, 'activeMonth' => 0, 'newToday' => 0],
+                'conversions' => ['total' => 0, 'pending' => 0, 'approved' => 0, 'rejected' => 0],
+                'mining' => ['activeMining' => 0, 'totalEarned' => 0],
+                'missions' => ['total' => 0, 'completed' => 0],
+                'promoCodes' => ['total' => 0, 'used' => 0, 'available' => 0],
+                'referrals' => ['total' => 0]
+            ]);
+        }
     }
     
     private function handleUsers() {
@@ -284,6 +296,37 @@ class AdminPanelAPI {
                 }
             } else {
                 echo json_encode(['success' => true, 'message' => 'No fields to update']);
+            }
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // Create new user
+            $input = json_decode(file_get_contents('php://input'), true);
+            
+            $userId = $input['id'] ?? uniqid('user_', true);
+            $authKey = bin2hex(random_bytes(32));
+            $now = time() * 1000;
+            
+            $stmt = $this->db->prepare("INSERT INTO users (
+                id, first_name, last_name, avatar_url, auth_key, 
+                balance, total_earned, joined_at, last_active, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')");
+            
+            $result = $stmt->execute([
+                $userId,
+                $input['firstName'] ?? 'User',
+                $input['lastName'] ?? '',
+                $input['avatarUrl'] ?? '',
+                $authKey,
+                $input['balance'] ?? 0,
+                $input['totalEarned'] ?? 0,
+                $now,
+                $now
+            ]);
+            
+            if ($result) {
+                echo json_encode(['success' => true, 'userId' => $userId]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to create user']);
             }
         }
     }

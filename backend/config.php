@@ -5,14 +5,20 @@ define('DB_NAME', 'c828_ligarx');
 define('DB_USER', 'c828_ligarx');
 define('DB_PASS', 'ligarx');
 
-// Security configuration - Can be toggled ON/OFF
+// Bot configuration
+define('BOT_TOKEN', '8188857509:AAHjKKUaC_kljF1KKHZ0VW1pWkcWDfaY65k');
+define('BOT_USERNAME', 'tanga');
+define('WEBAPP_URL', 'https://your-domain.com');
+define('AVATAR_BASE_URL', 'http://c828.coresuz.ru/avatars');
+
+// Security configuration - Toggle ON/OFF
 define('AUTH_KEY_DETECTION', true); // Set to false to disable authKey validation
 define('ANTI_DDOS_PROTECTION', true); // Set to false to disable anti-DDoS
 
-// Rate limiting configuration
-define('RATE_LIMIT_REQUESTS', 100); // 100 requests per minute
-define('RATE_LIMIT_WINDOW', 60); // 1 minute window
-define('BAN_DURATION', 300); // 5 minutes ban
+// Rate limiting configuration (for session-based DDOS protection)
+define('DDOS_RATE_LIMIT', 100); // 100 requests per minute
+define('DDOS_TIME_WINDOW', 60); // 1 minute window
+define('DDOS_BAN_DURATION', 300); // 5 minutes ban
 
 // Game configuration
 define('WELCOME_BONUS', 100);
@@ -58,7 +64,7 @@ class Database {
     
     private function initializeTables() {
         try {
-            // Users table - removed unnecessary fields
+            // Users table - cleaned up, removed unnecessary fields
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS users (
                 id VARCHAR(255) PRIMARY KEY,
                 first_name VARCHAR(255) NOT NULL,
@@ -97,7 +103,8 @@ class Database {
                 INDEX idx_referred_by (referred_by),
                 INDEX idx_total_earned (total_earned),
                 INDEX idx_last_active (last_active),
-                INDEX idx_status (status)
+                INDEX idx_status (status),
+                INDEX idx_xp (xp)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             
             // Missions table
@@ -231,9 +238,9 @@ class Database {
                 INDEX idx_priority (priority)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             
-            // Insert default config
+            // Insert default config (only bot username and banner)
             $this->pdo->exec("INSERT IGNORE INTO config (setting_key, setting_value) VALUES 
-                ('bot_username', 'tanga'),
+                ('bot_username', '" . BOT_USERNAME . "'),
                 ('banner_url', 'https://mining-master.onrender.com//assets/banner-BH8QO14f.png')");
             
         } catch (Exception $e) {
@@ -244,63 +251,94 @@ class Database {
 }
 
 /**
- * Fast session-based rate limiting for DDOS protection
+ * Fast session-based DDOS protection (no MySQL)
  */
-function checkSessionRateLimit($ip, $limit = RATE_LIMIT_REQUESTS, $window = RATE_LIMIT_WINDOW, $banDuration = BAN_DURATION) {
+function checkSessionRateLimit($ip, $limit = DDOS_RATE_LIMIT, $window = DDOS_TIME_WINDOW, $banDuration = DDOS_BAN_DURATION) {
     if (!ANTI_DDOS_PROTECTION) return ['ok' => true];
     
-    session_start();
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
     $now = time();
     
-    if (!isset($_SESSION['ip_data'][$ip])) {
-        $_SESSION['ip_data'][$ip] = ['timestamps' => [], 'ban_until' => 0];
+    if (!isset($_SESSION['ddos_data'][$ip])) {
+        $_SESSION['ddos_data'][$ip] = ['requests' => [], 'ban_until' => 0];
     }
 
     // Check if IP is banned
-    if ($_SESSION['ip_data'][$ip]['ban_until'] > $now) {
-        return ['ok' => false, 'reason' => 'Banned', 'wait' => $_SESSION['ip_data'][$ip]['ban_until'] - $now];
+    if ($_SESSION['ddos_data'][$ip]['ban_until'] > $now) {
+        return ['ok' => false, 'reason' => 'IP Banned', 'wait' => $_SESSION['ddos_data'][$ip]['ban_until'] - $now];
     }
 
-    // Clean old requests
-    $_SESSION['ip_data'][$ip]['timestamps'] = array_filter(
-        $_SESSION['ip_data'][$ip]['timestamps'],
-        fn($t) => $t > $now - $window
+    // Clean old requests (older than window)
+    $_SESSION['ddos_data'][$ip]['requests'] = array_filter(
+        $_SESSION['ddos_data'][$ip]['requests'],
+        fn($timestamp) => $timestamp > ($now - $window)
     );
 
     // Check rate limit
-    if (count($_SESSION['ip_data'][$ip]['timestamps']) >= $limit) {
-        $_SESSION['ip_data'][$ip]['ban_until'] = $now + $banDuration;
-        return ['ok' => false, 'reason' => 'Rate limit', 'wait' => $banDuration];
+    if (count($_SESSION['ddos_data'][$ip]['requests']) >= $limit) {
+        $_SESSION['ddos_data'][$ip]['ban_until'] = $now + $banDuration;
+        error_log("IP banned for DDOS: $ip");
+        return ['ok' => false, 'reason' => 'Rate limit exceeded', 'wait' => $banDuration];
     }
 
-    // Add new request
-    $_SESSION['ip_data'][$ip]['timestamps'][] = $now;
+    // Add current request
+    $_SESSION['ddos_data'][$ip]['requests'][] = $now;
     return ['ok' => true];
 }
 
 /**
  * Verify Telegram init data
  */
-function verifyInitData($initData, $botToken) {
+function verifyTelegramInitData($initData, $botToken) {
     if (empty($initData)) return false;
     
-    parse_str($initData, $data);
-    if (!isset($data['hash'])) return false;
+    try {
+        parse_str($initData, $data);
+        if (!isset($data['hash'])) return false;
 
-    $checkHash = $data['hash'];
-    unset($data['hash']);
-    ksort($data);
+        $checkHash = $data['hash'];
+        unset($data['hash']);
+        ksort($data);
 
-    $checkString = "";
-    foreach ($data as $k => $v) {
-        $checkString .= "$k=$v\n";
+        $checkString = "";
+        foreach ($data as $k => $v) {
+            $checkString .= "$k=$v\n";
+        }
+        $checkString = rtrim($checkString, "\n");
+
+        $secretKey = hash_hmac('sha256', $botToken, "WebAppData", true);
+        $hash = hash_hmac('sha256', $checkString, $secretKey);
+
+        return hash_equals($hash, $checkHash) ? $data : false;
+    } catch (Exception $e) {
+        error_log("Telegram init data verification failed: " . $e->getMessage());
+        return false;
     }
-    $checkString = rtrim($checkString, "\n");
+}
 
-    $secretKey = hash_hmac('sha256', $botToken, "WebAppData", true);
-    $hash = hash_hmac('sha256', $checkString, $secretKey);
-
-    return hash_equals($hash, $checkHash) ? $data : false;
+/**
+ * Get client IP address
+ */
+function getClientIP() {
+    $ipKeys = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
+    
+    foreach ($ipKeys as $key) {
+        if (array_key_exists($key, $_SERVER) === true) {
+            $ip = $_SERVER[$key];
+            if (strpos($ip, ',') !== false) {
+                $ip = explode(',', $ip)[0];
+            }
+            $ip = trim($ip);
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $ip;
+            }
+        }
+    }
+    
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
 
 // Auto-initialize database on first load
