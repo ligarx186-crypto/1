@@ -56,7 +56,7 @@ class FastSecureAPI {
             }
         }
         
-        // AuthKey validation (if enabled)
+        // AuthKey validation (if enabled in config.php)
         if ($authKeyRequired) {
             if (empty($authKey)) {
                 $this->log("Missing auth key for user: $userId");
@@ -205,7 +205,7 @@ class FastSecureAPI {
             $now = time() * 1000;
             if ($existingUser['is_mining'] && $existingUser['mining_start_time']) {
                 $offlineDuration = floor(($now - $existingUser['mining_start_time']) / 1000);
-                $limitedDuration = min($offlineDuration, MAX_MINING_TIME);
+                $limitedDuration = min($offlineDuration, MIN_CLAIM_TIME); // 30 minutes max
                 
                 if ($limitedDuration > 0) {
                     $earned = $existingUser['mining_rate'] * $limitedDuration;
@@ -279,7 +279,7 @@ class FastSecureAPI {
         
         if ($user['is_mining'] && $user['mining_start_time']) {
             $miningDuration = floor(($now - $user['mining_start_time']) / 1000);
-            $limitedDuration = min($miningDuration, MAX_MINING_TIME);
+            $limitedDuration = min($miningDuration, MIN_CLAIM_TIME); // 30 minutes max
             $pendingRewards = $user['mining_rate'] * $limitedDuration;
             
             // Check if can claim (30 min minimum + 5 min between claims)
@@ -382,7 +382,7 @@ class FastSecureAPI {
                     
                     // Check if can claim
                     if ($miningDuration >= $user['min_claim_time'] && $timeSinceLastClaim >= MIN_CLAIM_INTERVAL) {
-                        $limitedDuration = min($miningDuration, MAX_MINING_TIME);
+                        $limitedDuration = min($miningDuration, MIN_CLAIM_TIME); // 30 minutes max
                         $earned = $user['mining_rate'] * $limitedDuration;
                         $xp = floor($limitedDuration / 60); // 1 XP per minute
                         
@@ -505,7 +505,7 @@ class FastSecureAPI {
         $miningRateMultiplier = pow(1.5, ($miningRateLevel - 1));
         $miningSpeedMultiplier = pow(1.2, ($miningSpeedLevel - 1));
         $newMiningRate = BASE_MINING_RATE * $miningRateMultiplier * $miningSpeedMultiplier;
-        $newClaimTime = max(300, MIN_CLAIM_TIME - (CLAIM_TIME_REDUCTION * ($claimTimeLevel - 1)));
+        $newClaimTime = max(300, MIN_CLAIM_TIME - (60 * ($claimTimeLevel - 1))); // 60 seconds reduction per level
         
         $stmt = $this->db->prepare("UPDATE users SET 
             balance = ?, 

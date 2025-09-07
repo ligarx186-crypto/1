@@ -1,4 +1,4 @@
-// Optimized PHP Backend API Service with Telegram Authentication
+// Optimized API Service with proper Telegram init data handling
 const API_BASE_URL = '/backend/api.php'
 
 class APIService {
@@ -13,13 +13,21 @@ class APIService {
     this.telegramInitData = initData
   }
   
+  // Get Telegram init data properly from Telegram WebApp
+  private getTelegramInitData(): string {
+    if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+      return window.Telegram.WebApp.initData || ''
+    }
+    return this.telegramInitData
+  }
+  
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}?path=${encodeURIComponent(endpoint)}`
     
     const headers = {
       'Content-Type': 'application/json',
       'X-Auth-Key': this.authKey,
-      'X-Telegram-Init-Data': this.telegramInitData,
+      'X-Telegram-Init-Data': this.getTelegramInitData(),
       'X-Ref-Id': this.getUrlParam('ref') || '',
       'X-Ref-Auth': this.getUrlParam('refauth') || '',
       ...options.headers

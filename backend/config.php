@@ -11,11 +11,11 @@ define('BOT_USERNAME', 'tanga');
 define('WEBAPP_URL', 'https://your-domain.com');
 define('AVATAR_BASE_URL', 'http://c828.coresuz.ru/avatars');
 
-// Security configuration - Toggle ON/OFF
+// Security configuration - Toggle ON/OFF from config.php (not database)
 define('AUTH_KEY_DETECTION', true); // Set to false to disable authKey validation
 define('ANTI_DDOS_PROTECTION', true); // Set to false to disable anti-DDoS
 
-// Rate limiting configuration (for session-based DDOS protection)
+// Rate limiting configuration (session-based for speed)
 define('DDOS_RATE_LIMIT', 100); // 100 requests per minute
 define('DDOS_TIME_WINDOW', 60); // 1 minute window
 define('DDOS_BAN_DURATION', 300); // 5 minutes ban
@@ -25,8 +25,6 @@ define('WELCOME_BONUS', 100);
 define('REFERRAL_BONUS', 200);
 define('BASE_MINING_RATE', 0.001);
 define('MIN_CLAIM_TIME', 1800); // 30 minutes minimum mining time
-define('MAX_MINING_TIME', 1800); // 30 minutes maximum mining time
-define('CLAIM_TIME_REDUCTION', 60); // seconds per boost level
 define('MIN_CLAIM_INTERVAL', 300); // 5 minutes between claims
 
 class Database {
@@ -64,7 +62,7 @@ class Database {
     
     private function initializeTables() {
         try {
-            // Users table - cleaned up, removed unnecessary fields
+            // Users table with correct snake_case column names
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS users (
                 id VARCHAR(255) PRIMARY KEY,
                 first_name VARCHAR(255) NOT NULL,
@@ -251,9 +249,10 @@ class Database {
 }
 
 /**
- * Fast session-based DDOS protection (no MySQL)
+ * Fast session-based DDOS protection (no MySQL for speed)
  */
 function checkSessionRateLimit($ip, $limit = DDOS_RATE_LIMIT, $window = DDOS_TIME_WINDOW, $banDuration = DDOS_BAN_DURATION) {
+    // Check if DDOS protection is enabled in config.php
     if (!ANTI_DDOS_PROTECTION) return ['ok' => true];
     
     if (session_status() === PHP_SESSION_NONE) {
@@ -290,7 +289,7 @@ function checkSessionRateLimit($ip, $limit = DDOS_RATE_LIMIT, $window = DDOS_TIM
 }
 
 /**
- * Verify Telegram init data
+ * Verify Telegram init data properly
  */
 function verifyTelegramInitData($initData, $botToken) {
     if (empty($initData)) return false;

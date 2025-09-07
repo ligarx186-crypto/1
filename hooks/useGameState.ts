@@ -93,17 +93,17 @@ export const useGameState = () => {
       telegram.init()
       const telegramUser = telegram.getUser()
       
-      // Get Telegram init data properly
-      let telegramInitData = ''
-      if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-        telegramInitData = window.Telegram.WebApp.initData || ''
-      }
+      // Get Telegram init data properly from WebApp
+      const telegramInitData = typeof window !== 'undefined' && window.Telegram?.WebApp 
+        ? window.Telegram.WebApp.initData || '' 
+        : ''
 
       const userId = getUrlParameter("id") || telegramUser?.id?.toString() || "user123"
       const authKey = getUrlParameter("authKey")
       
       if (!authKey) {
         console.error('No auth key provided')
+        setLoading(false)
         return
       }
       
@@ -161,6 +161,7 @@ export const useGameState = () => {
       setLoading(false)
     } catch (error) {
       console.error("Failed to initialize game:", error)
+      setLoading(false)
     }
   }, [])
 
