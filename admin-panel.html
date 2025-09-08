@@ -4,207 +4,414 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UC Coin Ultra - Admin Panel</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .fade-in { animation: fadeIn 0.3s ease-in; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .slide-up { animation: slideUp 0.3s ease-out; }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+        }
+        
+        .input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+        
+        .input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+        }
+        
+        .grid {
+            display: grid;
+            gap: 24px;
+        }
+        
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        
+        .nav {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 12px;
+        }
+        
+        .nav-btn {
+            padding: 12px 20px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .nav-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .table th,
+        .table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+        }
+        
+        .table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .status-active { color: #4CAF50; }
+        .status-banned { color: #f44336; }
+        .status-pending { color: #ff9800; }
+        .status-approved { color: #4CAF50; }
+        .status-rejected { color: #f44336; }
+        
+        .hidden { display: none !important; }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+        
+        .textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        .checkbox {
+            margin-right: 8px;
+        }
+        
+        .flex {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .text-center { text-align: center; }
+        .text-success { color: #4CAF50; }
+        .text-danger { color: #f44336; }
+        .text-warning { color: #ff9800; }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
+<body>
     <!-- Login Screen -->
-    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-purple-900">
-        <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span class="text-2xl">🔐</span>
+    <div id="loginScreen" class="container">
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+            <div class="card" style="max-width: 400px; width: 100%;">
+                <div class="text-center" style="margin-bottom: 32px;">
+                    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 2rem;">🔐</div>
+                    <h1 style="font-size: 2rem; margin-bottom: 8px;">Admin Panel</h1>
+                    <p style="color: rgba(255, 255, 255, 0.7);">UC Coin Ultra Management</p>
                 </div>
-                <h1 class="text-2xl font-bold text-white">Admin Panel</h1>
-                <p class="text-gray-400">UC Coin Ultra Management</p>
+                
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="adminEmail" class="input" placeholder="admin@example.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" id="adminPassword" class="input" placeholder="Enter password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn" style="width: 100%;">Login</button>
+                </form>
+                
+                <div id="loginError" class="hidden" style="margin-top: 16px; padding: 12px; background: rgba(244, 67, 54, 0.2); border: 1px solid rgba(244, 67, 54, 0.5); border-radius: 8px; color: #f44336;"></div>
             </div>
-            
-            <form id="loginForm" class="space-y-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Email</label>
-                    <input type="email" id="adminEmail" required 
-                           class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
-                           placeholder="admin@example.com">
-                </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
-                    <input type="password" id="adminPassword" required 
-                           class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
-                           placeholder="Enter password">
-                </div>
-                
-                <button type="submit" 
-                        class="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105">
-                    Login
-                </button>
-            </form>
-            
-            <div id="loginError" class="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm hidden"></div>
         </div>
     </div>
 
     <!-- Main Dashboard -->
     <div id="dashboard" class="hidden">
         <!-- Header -->
-        <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                        <span class="text-xl">⚡</span>
-                    </div>
+        <header style="background: rgba(0, 0, 0, 0.3); padding: 20px; margin-bottom: 32px; border-radius: 16px;">
+            <div class="flex-between">
+                <div class="flex">
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">⚡</div>
                     <div>
-                        <h1 class="text-xl font-bold">UC Coin Ultra</h1>
-                        <p class="text-gray-400 text-sm">Admin Dashboard</p>
+                        <h1 style="font-size: 1.5rem; margin-bottom: 4px;">UC Coin Ultra</h1>
+                        <p style="color: rgba(255, 255, 255, 0.7);">Admin Dashboard</p>
                     </div>
                 </div>
                 
-                <div class="flex items-center space-x-4">
-                    <span id="adminInfo" class="text-gray-300"></span>
-                    <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg transition-colors">
-                        Logout
-                    </button>
+                <div class="flex">
+                    <span id="adminInfo" style="margin-right: 16px; color: rgba(255, 255, 255, 0.8);"></span>
+                    <button onclick="logout()" class="btn btn-danger">Logout</button>
                 </div>
             </div>
         </header>
 
         <!-- Navigation -->
-        <nav class="bg-gray-800 border-b border-gray-700 px-6 py-2">
-            <div class="flex space-x-1">
-                <button onclick="showSection('dashboard')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="dashboard">
-                    📊 Dashboard
-                </button>
-                <button onclick="showSection('users')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="users">
-                    👥 Users
-                </button>
-                <button onclick="showSection('missions')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="missions">
-                    🎯 Missions
-                </button>
-                <button onclick="showSection('categories')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="categories">
-                    💰 Categories
-                </button>
-                <button onclick="showSection('conversions')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="conversions">
-                    🔄 Conversions
-                </button>
-                <button onclick="showSection('promo-codes')" class="nav-btn px-4 py-2 rounded-lg transition-colors hover:bg-gray-700" data-section="promo-codes">
-                    🎫 Promo Codes
-                </button>
-            </div>
+        <nav class="nav">
+            <button onclick="showSection('dashboard')" class="nav-btn active" data-section="dashboard">📊 Dashboard</button>
+            <button onclick="showSection('users')" class="nav-btn" data-section="users">👥 Users</button>
+            <button onclick="showSection('missions')" class="nav-btn" data-section="missions">🎯 Missions</button>
+            <button onclick="showSection('categories')" class="nav-btn" data-section="categories">💰 Categories</button>
+            <button onclick="showSection('conversions')" class="nav-btn" data-section="conversions">🔄 Conversions</button>
+            <button onclick="showSection('promo-codes')" class="nav-btn" data-section="promo-codes">🎫 Promo Codes</button>
         </nav>
 
         <!-- Content -->
-        <main class="p-6">
+        <main class="container">
             <!-- Dashboard Section -->
             <div id="dashboardSection" class="section">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-400 text-sm">Total Users</p>
-                                <p id="totalUsers" class="text-2xl font-bold text-blue-400">0</p>
-                            </div>
-                            <div class="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">👥</span>
-                            </div>
-                        </div>
+                <div class="grid grid-4">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalUsers">0</div>
+                        <div class="stat-label">Total Users</div>
                     </div>
-                    
-                    <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-400 text-sm">Active Today</p>
-                                <p id="activeToday" class="text-2xl font-bold text-green-400">0</p>
-                            </div>
-                            <div class="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">🟢</span>
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="activeToday">0</div>
+                        <div class="stat-label">Active Today</div>
                     </div>
-                    
-                    <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-400 text-sm">Total Earned</p>
-                                <p id="totalEarned" class="text-2xl font-bold text-yellow-400">0</p>
-                            </div>
-                            <div class="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">💰</span>
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalEarned">0</div>
+                        <div class="stat-label">Total Earned</div>
                     </div>
-                    
-                    <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-400 text-sm">Pending Conversions</p>
-                                <p id="pendingConversions" class="text-2xl font-bold text-orange-400">0</p>
-                            </div>
-                            <div class="w-12 h-12 bg-orange-500/20 rounded-lg flex items-center justify-center">
-                                <span class="text-2xl">⏳</span>
-                            </div>
-                        </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="pendingConversions">0</div>
+                        <div class="stat-label">Pending Conversions</div>
                     </div>
                 </div>
             </div>
 
             <!-- Users Section -->
             <div id="usersSection" class="section hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">User Management</h2>
-                    <div class="flex space-x-4">
-                        <input type="text" id="userSearch" placeholder="Search users..." 
-                               class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400">
-                        <button onclick="searchUsers()" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors">
-                            Search
-                        </button>
+                <div class="flex-between" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 1.8rem;">User Management</h2>
+                    <div class="flex">
+                        <input type="text" id="userSearch" class="input" placeholder="Search users..." style="margin-bottom: 0; margin-right: 12px;">
+                        <button onclick="searchUsers()" class="btn">Search</button>
+                        <button onclick="showCreateUserModal()" class="btn btn-success" style="margin-left: 12px;">+ Add User</button>
                     </div>
                 </div>
                 
-                <div class="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-                    <div id="usersTable" class="overflow-x-auto">
-                        <!-- Users table will be loaded here -->
-                    </div>
+                <div class="card">
+                    <div id="usersTable"></div>
                 </div>
             </div>
 
             <!-- Categories Section -->
             <div id="categoriesSection" class="section hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">Wallet Categories</h2>
-                    <button onclick="showCreateCategoryModal()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg transition-colors">
-                        + Add Category
-                    </button>
+                <div class="flex-between" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 1.8rem;">Wallet Categories</h2>
+                    <button onclick="showCreateCategoryModal()" class="btn btn-success">+ Add Category</button>
                 </div>
                 
-                <div id="categoriesContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Categories will be loaded here -->
-                </div>
+                <div id="categoriesContainer" class="grid grid-2"></div>
             </div>
 
             <!-- Missions Section -->
             <div id="missionsSection" class="section hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">Mission Management</h2>
-                    <button onclick="showCreateMissionModal()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg transition-colors">
-                        + Add Mission
-                    </button>
+                <div class="flex-between" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 1.8rem;">Mission Management</h2>
+                    <button onclick="showCreateMissionModal()" class="btn btn-success">+ Add Mission</button>
                 </div>
                 
-                <div id="missionsContainer" class="space-y-4">
-                    <!-- Missions will be loaded here -->
-                </div>
+                <div id="missionsContainer"></div>
             </div>
 
             <!-- Conversions Section -->
             <div id="conversionsSection" class="section hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">Conversion Management</h2>
-                    <select id="conversionFilter" onchange="loadConversions()" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                <div class="flex-between" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 1.8rem;">Conversion Management</h2>
+                    <select id="conversionFilter" onchange="loadConversions()" class="select">
                         <option value="all">All Conversions</option>
                         <option value="pending">Pending</option>
                         <option value="approved">Approved</option>
@@ -212,28 +419,22 @@
                     </select>
                 </div>
                 
-                <div id="conversionsContainer" class="space-y-4">
-                    <!-- Conversions will be loaded here -->
-                </div>
+                <div id="conversionsContainer"></div>
             </div>
 
             <!-- Promo Codes Section -->
             <div id="promoCodesSection" class="section hidden">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold">Promo Code Management</h2>
-                    <button onclick="showCreatePromoModal()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg transition-colors">
-                        + Add Promo Codes
-                    </button>
+                <div class="flex-between" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 1.8rem;">Promo Code Management</h2>
+                    <button onclick="showCreatePromoModal()" class="btn btn-success">+ Add Promo Codes</button>
                 </div>
                 
-                <div id="promoCodesContainer" class="space-y-4">
-                    <!-- Promo codes will be loaded here -->
-                </div>
+                <div id="promoCodesContainer"></div>
             </div>
         </main>
     </div>
 
-    <!-- Modals will be added here -->
+    <!-- Modals -->
     <div id="modalContainer"></div>
 
     <script>
@@ -320,8 +521,7 @@
             
             // Remove active class from all nav buttons
             document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.classList.remove('bg-blue-600', 'text-white');
-                btn.classList.add('text-gray-300');
+                btn.classList.remove('active');
             });
             
             // Show selected section
@@ -334,8 +534,7 @@
             // Highlight active nav button
             const navBtn = document.querySelector(`[data-section="${sectionName}"]`);
             if (navBtn) {
-                navBtn.classList.add('bg-blue-600', 'text-white');
-                navBtn.classList.remove('text-gray-300');
+                navBtn.classList.add('active');
             }
             
             // Load section data
@@ -366,12 +565,17 @@
             try {
                 const stats = await apiRequest('stats');
                 
-                document.getElementById('totalUsers').textContent = stats.users.total;
-                document.getElementById('activeToday').textContent = stats.users.activeToday;
-                document.getElementById('totalEarned').textContent = stats.mining.totalEarned.toFixed(2);
-                document.getElementById('pendingConversions').textContent = stats.conversions.pending;
+                document.getElementById('totalUsers').textContent = stats.users?.total || 0;
+                document.getElementById('activeToday').textContent = stats.users?.activeToday || 0;
+                document.getElementById('totalEarned').textContent = (stats.mining?.totalEarned || 0).toFixed(2);
+                document.getElementById('pendingConversions').textContent = stats.conversions?.pending || 0;
             } catch (error) {
                 console.error('Failed to load dashboard:', error);
+                // Set default values on error
+                document.getElementById('totalUsers').textContent = '0';
+                document.getElementById('activeToday').textContent = '0';
+                document.getElementById('totalEarned').textContent = '0';
+                document.getElementById('pendingConversions').textContent = '0';
             }
         }
 
@@ -381,48 +585,42 @@
                 const data = await apiRequest(`users&page=${page}&search=${encodeURIComponent(search)}`);
                 
                 let html = `
-                    <table class="w-full">
-                        <thead class="bg-gray-700">
+                    <table class="table">
+                        <thead>
                             <tr>
-                                <th class="px-4 py-3 text-left">User</th>
-                                <th class="px-4 py-3 text-left">Balance</th>
-                                <th class="px-4 py-3 text-left">Level</th>
-                                <th class="px-4 py-3 text-left">Status</th>
-                                <th class="px-4 py-3 text-left">Actions</th>
+                                <th>User</th>
+                                <th>Balance</th>
+                                <th>Level</th>
+                                <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                 `;
                 
                 data.users.forEach(user => {
-                    const statusColor = user.status === 'active' ? 'text-green-400' : 
-                                       user.status === 'banned' ? 'text-red-400' : 'text-yellow-400';
+                    const statusClass = user.status === 'active' ? 'status-active' : 
+                                       user.status === 'banned' ? 'status-banned' : 'status-pending';
                     
                     html += `
-                        <tr class="border-b border-gray-700 hover:bg-gray-700/50">
-                            <td class="px-4 py-3">
-                                <div class="flex items-center space-x-3">
+                        <tr>
+                            <td>
+                                <div class="flex">
                                     <img src="${user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.first_name) + '&background=4CAF50&color=fff&size=40'}" 
-                                         class="w-10 h-10 rounded-full" alt="Avatar">
+                                         style="width: 40px; height: 40px; border-radius: 50%; margin-right: 12px;" alt="Avatar">
                                     <div>
-                                        <p class="font-semibold">${user.first_name} ${user.last_name || ''}</p>
-                                        <p class="text-gray-400 text-sm">${user.id}</p>
+                                        <div style="font-weight: 600;">${user.first_name} ${user.last_name || ''}</div>
+                                        <div style="color: rgba(255, 255, 255, 0.6); font-size: 0.8rem;">${user.id}</div>
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-4 py-3">${parseFloat(user.balance).toFixed(3)} DRX</td>
-                            <td class="px-4 py-3">Level ${user.level_num}</td>
-                            <td class="px-4 py-3">
-                                <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColor} bg-gray-700">
-                                    ${user.status}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3">
-                                <button onclick="editUser('${user.id}')" class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm transition-colors">
-                                    Edit
-                                </button>
+                            <td>${parseFloat(user.balance).toFixed(3)} DRX</td>
+                            <td>Level ${user.level_num}</td>
+                            <td><span class="${statusClass}">${user.status}</span></td>
+                            <td>
+                                <button onclick="editUser('${user.id}')" class="btn" style="padding: 6px 12px; margin-right: 8px;">Edit</button>
                                 <button onclick="banUser('${user.id}', '${user.status === 'banned' ? 'active' : 'banned'}')" 
-                                        class="ml-2 ${user.status === 'banned' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} px-3 py-1 rounded text-sm transition-colors">
+                                        class="btn ${user.status === 'banned' ? 'btn-success' : 'btn-danger'}" style="padding: 6px 12px;">
                                     ${user.status === 'banned' ? 'Unban' : 'Ban'}
                                 </button>
                             </td>
@@ -434,6 +632,7 @@
                 document.getElementById('usersTable').innerHTML = html;
             } catch (error) {
                 console.error('Failed to load users:', error);
+                document.getElementById('usersTable').innerHTML = '<p style="text-align: center; color: rgba(255, 255, 255, 0.6);">Failed to load users</p>';
             }
         }
 
@@ -445,8 +644,38 @@
 
         // Edit user
         function editUser(userId) {
-            // Implementation for user editing modal
-            console.log('Edit user:', userId);
+            showModal('Edit User', `
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId" value="${userId}">
+                    <div class="form-group">
+                        <label class="form-label">First Name</label>
+                        <input type="text" id="editFirstName" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" id="editLastName" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Balance</label>
+                        <input type="number" id="editBalance" class="input" step="0.001" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Level</label>
+                        <input type="number" id="editLevel" class="input" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">XP</label>
+                        <input type="number" id="editXp" class="input" min="0" required>
+                    </div>
+                    <div class="flex" style="gap: 12px;">
+                        <button type="submit" class="btn btn-success">Save Changes</button>
+                        <button type="button" onclick="closeModal()" class="btn">Cancel</button>
+                    </div>
+                </form>
+            `);
+            
+            // Load user data
+            loadUserForEdit(userId);
         }
 
         // Ban/Unban user
@@ -460,6 +689,7 @@
                 loadUsers(); // Reload users list
             } catch (error) {
                 console.error('Failed to update user status:', error);
+                alert('Failed to update user status');
             }
         }
 
@@ -471,46 +701,42 @@
                 let html = '';
                 categories.forEach(category => {
                     html += `
-                        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                            <div class="flex items-center justify-between mb-4">
-                                <div class="flex items-center space-x-3">
-                                    <img src="${category.image}" class="w-12 h-12 rounded-lg object-cover" alt="${category.name}">
+                        <div class="card">
+                            <div class="flex-between" style="margin-bottom: 16px;">
+                                <div class="flex">
+                                    <img src="${category.image}" style="width: 60px; height: 60px; border-radius: 12px; object-fit: cover; margin-right: 16px;" alt="${category.name}">
                                     <div>
-                                        <h3 class="font-bold text-lg">${category.name}</h3>
-                                        <p class="text-gray-400 text-sm">${category.description}</p>
+                                        <h3 style="font-size: 1.2rem; margin-bottom: 4px;">${category.name}</h3>
+                                        <p style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem;">${category.description}</p>
                                     </div>
                                 </div>
-                                <div class="flex space-x-2">
-                                    <button onclick="editCategory('${category.id}')" class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Edit
-                                    </button>
-                                    <button onclick="deleteCategory('${category.id}')" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Delete
-                                    </button>
+                                <div class="flex">
+                                    <button onclick="editCategory('${category.id}')" class="btn" style="margin-right: 8px;">Edit</button>
+                                    <button onclick="deleteCategory('${category.id}')" class="btn btn-danger">Delete</button>
                                 </div>
                             </div>
                             
-                            <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="grid grid-2" style="font-size: 0.9rem; margin-bottom: 16px;">
                                 <div>
-                                    <span class="text-gray-400">Min/Max:</span>
-                                    <span class="text-white">${category.minConversion} - ${category.maxConversion}</span>
+                                    <span style="color: rgba(255, 255, 255, 0.6);">Min/Max:</span>
+                                    <span>${category.minConversion} - ${category.maxConversion}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400">ID Length:</span>
-                                    <span class="text-white">${category.minIdLength} - ${category.maxIdLength}</span>
+                                    <span style="color: rgba(255, 255, 255, 0.6);">ID Length:</span>
+                                    <span>${category.minIdLength} - ${category.maxIdLength}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400">Rate:</span>
-                                    <span class="text-white">${category.conversionRate}x</span>
+                                    <span style="color: rgba(255, 255, 255, 0.6);">Rate:</span>
+                                    <span>${category.conversionRate}x</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400">Status:</span>
-                                    <span class="${category.active ? 'text-green-400' : 'text-red-400'}">${category.active ? 'Active' : 'Inactive'}</span>
+                                    <span style="color: rgba(255, 255, 255, 0.6);">Status:</span>
+                                    <span class="${category.active ? 'text-success' : 'text-danger'}">${category.active ? 'Active' : 'Inactive'}</span>
                                 </div>
                             </div>
                             
-                            <div class="mt-4">
-                                <span class="text-gray-400 text-sm">Packages: ${category.packages.length}</span>
+                            <div style="color: rgba(255, 255, 255, 0.6); font-size: 0.8rem;">
+                                Packages: ${category.packages.length}
                             </div>
                         </div>
                     `;
@@ -519,6 +745,7 @@
                 document.getElementById('categoriesContainer').innerHTML = html;
             } catch (error) {
                 console.error('Failed to load categories:', error);
+                document.getElementById('categoriesContainer').innerHTML = '<p style="text-align: center; color: rgba(255, 255, 255, 0.6);">Failed to load categories</p>';
             }
         }
 
@@ -529,35 +756,31 @@
                 
                 let html = '';
                 missions.forEach(mission => {
-                    const statusColor = mission.active ? 'text-green-400' : 'text-red-400';
+                    const statusClass = mission.active ? 'status-active' : 'status-banned';
                     
                     html += `
-                        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                            <div class="flex items-center justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <h3 class="font-bold text-lg">${mission.title}</h3>
-                                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColor} bg-gray-700">
+                        <div class="card">
+                            <div class="flex-between">
+                                <div style="flex: 1;">
+                                    <div class="flex" style="margin-bottom: 12px;">
+                                        <h3 style="font-size: 1.2rem; margin-right: 12px;">${mission.title}</h3>
+                                        <span class="${statusClass}" style="font-size: 0.8rem; padding: 4px 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px;">
                                             ${mission.active ? 'Active' : 'Inactive'}
                                         </span>
-                                        <span class="px-2 py-1 rounded-full text-xs font-semibold text-blue-400 bg-gray-700">
+                                        <span style="font-size: 0.8rem; padding: 4px 8px; background: rgba(102, 126, 234, 0.2); border-radius: 4px; margin-left: 8px; color: #667eea;">
                                             ${mission.type}
                                         </span>
                                     </div>
-                                    <p class="text-gray-400 mb-2">${mission.description}</p>
-                                    <div class="flex items-center space-x-4 text-sm">
-                                        <span class="text-yellow-400">💰 ${mission.reward} DRX</span>
-                                        <span class="text-gray-400">Category: ${mission.category}</span>
-                                        <span class="text-gray-400">Priority: ${mission.priority}</span>
+                                    <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 12px;">${mission.description}</p>
+                                    <div class="flex" style="font-size: 0.9rem; gap: 16px;">
+                                        <span style="color: #ffd700;">💰 ${mission.reward} DRX</span>
+                                        <span style="color: rgba(255, 255, 255, 0.6);">Category: ${mission.category}</span>
+                                        <span style="color: rgba(255, 255, 255, 0.6);">Priority: ${mission.priority}</span>
                                     </div>
                                 </div>
-                                <div class="flex space-x-2">
-                                    <button onclick="editMission('${mission.id}')" class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Edit
-                                    </button>
-                                    <button onclick="deleteMission('${mission.id}')" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Delete
-                                    </button>
+                                <div class="flex">
+                                    <button onclick="editMission('${mission.id}')" class="btn" style="margin-right: 8px;">Edit</button>
+                                    <button onclick="deleteMission('${mission.id}')" class="btn btn-danger">Delete</button>
                                 </div>
                             </div>
                         </div>
@@ -567,6 +790,7 @@
                 document.getElementById('missionsContainer').innerHTML = html;
             } catch (error) {
                 console.error('Failed to load missions:', error);
+                document.getElementById('missionsContainer').innerHTML = '<p style="text-align: center; color: rgba(255, 255, 255, 0.6);">Failed to load missions</p>';
             }
         }
 
@@ -578,35 +802,31 @@
                 
                 let html = '';
                 conversions.forEach(conversion => {
-                    const statusColor = conversion.status === 'approved' ? 'text-green-400' : 
-                                       conversion.status === 'rejected' ? 'text-red-400' : 'text-yellow-400';
+                    const statusClass = conversion.status === 'approved' ? 'status-approved' : 
+                                       conversion.status === 'rejected' ? 'status-rejected' : 'status-pending';
                     
                     html += `
-                        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                            <div class="flex items-center justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <h3 class="font-bold">${conversion.userName}</h3>
-                                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColor} bg-gray-700">
+                        <div class="card">
+                            <div class="flex-between">
+                                <div style="flex: 1;">
+                                    <div class="flex" style="margin-bottom: 12px;">
+                                        <h3 style="font-size: 1.1rem; margin-right: 12px;">${conversion.userName}</h3>
+                                        <span class="${statusClass}" style="font-size: 0.8rem; padding: 4px 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px;">
                                             ${conversion.status}
                                         </span>
                                     </div>
-                                    <p class="text-gray-400 mb-2">${conversion.amount} DRX → ${conversion.convertedAmount} ${conversion.toCurrency}</p>
-                                    <div class="text-sm text-gray-400">
+                                    <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 12px;">${conversion.amount} DRX → ${conversion.convertedAmount} ${conversion.toCurrency}</p>
+                                    <div style="font-size: 0.9rem; color: rgba(255, 255, 255, 0.6);">
                                         <p>Package: ${conversion.packageType}</p>
                                         <p>Category: ${conversion.category}</p>
                                         <p>Date: ${new Date(conversion.requestedAt).toLocaleString()}</p>
                                     </div>
                                 </div>
-                                <div class="flex space-x-2">
+                                <div class="flex">
                                     <button onclick="updateConversion('${conversion.id}', 'approved')" 
-                                            class="bg-green-500 hover:bg-green-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Approve
-                                    </button>
+                                            class="btn btn-success" style="margin-right: 8px;">Approve</button>
                                     <button onclick="updateConversion('${conversion.id}', 'rejected')" 
-                                            class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Reject
-                                    </button>
+                                            class="btn btn-danger">Reject</button>
                                 </div>
                             </div>
                         </div>
@@ -616,6 +836,7 @@
                 document.getElementById('conversionsContainer').innerHTML = html;
             } catch (error) {
                 console.error('Failed to load conversions:', error);
+                document.getElementById('conversionsContainer').innerHTML = '<p style="text-align: center; color: rgba(255, 255, 255, 0.6);">Failed to load conversions</p>';
             }
         }
 
@@ -626,30 +847,27 @@
                 
                 let html = '';
                 promoCodes.forEach(promo => {
-                    const usedColor = promo.used_by ? 'text-red-400' : 'text-green-400';
+                    const usedClass = promo.used_by ? 'status-banned' : 'status-active';
                     
                     html += `
-                        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                            <div class="flex items-center justify-between">
-                                <div class="flex-1">
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <h3 class="font-bold font-mono text-lg">${promo.code}</h3>
-                                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${usedColor} bg-gray-700">
+                        <div class="card">
+                            <div class="flex-between">
+                                <div style="flex: 1;">
+                                    <div class="flex" style="margin-bottom: 12px;">
+                                        <h3 style="font-family: monospace; font-size: 1.2rem; margin-right: 12px;">${promo.code}</h3>
+                                        <span class="${usedClass}" style="font-size: 0.8rem; padding: 4px 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px;">
                                             ${promo.used_by ? 'Used' : 'Available'}
                                         </span>
                                     </div>
-                                    <p class="text-gray-400 mb-2">${promo.description}</p>
-                                    <div class="text-sm text-gray-400">
+                                    <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 12px;">${promo.description}</p>
+                                    <div style="font-size: 0.9rem; color: rgba(255, 255, 255, 0.6);">
                                         <p>Reward: ${promo.reward} DRX</p>
                                         <p>Created: ${new Date(promo.created_at).toLocaleString()}</p>
                                         ${promo.used_by ? `<p>Used by: ${promo.used_by_name} (${promo.used_by})</p>` : ''}
                                     </div>
                                 </div>
-                                <div class="flex space-x-2">
-                                    <button onclick="deletePromoCode('${promo.id}')" 
-                                            class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm transition-colors">
-                                        Delete
-                                    </button>
+                                <div>
+                                    <button onclick="deletePromoCode('${promo.id}')" class="btn btn-danger">Delete</button>
                                 </div>
                             </div>
                         </div>
@@ -659,6 +877,7 @@
                 document.getElementById('promoCodesContainer').innerHTML = html;
             } catch (error) {
                 console.error('Failed to load promo codes:', error);
+                document.getElementById('promoCodesContainer').innerHTML = '<p style="text-align: center; color: rgba(255, 255, 255, 0.6);">Failed to load promo codes</p>';
             }
         }
 
@@ -673,6 +892,7 @@
                 loadConversions(); // Reload conversions
             } catch (error) {
                 console.error('Failed to update conversion:', error);
+                alert('Failed to update conversion');
             }
         }
 
@@ -687,42 +907,385 @@
                     loadPromoCodes(); // Reload promo codes
                 } catch (error) {
                     console.error('Failed to delete promo code:', error);
+                    alert('Failed to delete promo code');
                 }
             }
         }
 
-        // Modal functions (placeholders)
+        // Modal functions
+        function showModal(title, content) {
+            const modal = document.createElement('div');
+            modal.className = 'modal show';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="flex-between" style="margin-bottom: 24px;">
+                        <h2 style="font-size: 1.5rem;">${title}</h2>
+                        <button onclick="closeModal()" class="btn" style="padding: 8px 12px;">✕</button>
+                    </div>
+                    ${content}
+                </div>
+            `;
+            
+            document.getElementById('modalContainer').innerHTML = '';
+            document.getElementById('modalContainer').appendChild(modal);
+        }
+
+        function closeModal() {
+            document.getElementById('modalContainer').innerHTML = '';
+        }
+
         function showCreateCategoryModal() {
-            console.log('Create category modal');
+            showModal('Create Category', `
+                <form id="createCategoryForm">
+                    <div class="form-group">
+                        <label class="form-label">Category ID</label>
+                        <input type="text" id="categoryId" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" id="categoryName" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea id="categoryDescription" class="textarea" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Image URL</label>
+                        <input type="url" id="categoryImage" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Icon URL</label>
+                        <input type="url" id="categoryIconUrl" class="input">
+                    </div>
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Min ID Length</label>
+                            <input type="number" id="categoryMinIdLength" class="input" value="9" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max ID Length</label>
+                            <input type="number" id="categoryMaxIdLength" class="input" value="12" min="1" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" id="categoryActive" class="checkbox" checked> Active
+                        </label>
+                    </div>
+                    <div class="flex" style="gap: 12px;">
+                        <button type="submit" class="btn btn-success">Create Category</button>
+                        <button type="button" onclick="closeModal()" class="btn">Cancel</button>
+                    </div>
+                </form>
+            `);
+            
+            document.getElementById('createCategoryForm').addEventListener('submit', createCategory);
         }
 
         function showCreateMissionModal() {
-            console.log('Create mission modal');
+            showModal('Create Mission', `
+                <form id="createMissionForm">
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input type="text" id="missionTitle" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea id="missionDescription" class="textarea" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <select id="missionType" class="select" required>
+                            <option value="join_channel">Join Channel</option>
+                            <option value="join_group">Join Group</option>
+                            <option value="url_timer">URL Timer</option>
+                            <option value="promo_code">Promo Code</option>
+                            <option value="multi_promo_code">Multi Promo Code</option>
+                            <option value="daily_taps">Daily Taps</option>
+                            <option value="invite_friends">Invite Friends</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Reward (DRX)</label>
+                            <input type="number" id="missionReward" class="input" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Priority</label>
+                            <input type="number" id="missionPriority" class="input" value="999" min="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <input type="text" id="missionCategory" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Channel ID (for join missions)</label>
+                        <input type="text" id="missionChannelId" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">URL</label>
+                        <input type="url" id="missionUrl" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Promo Code</label>
+                        <input type="text" id="missionCode" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Required Time (seconds)</label>
+                        <input type="number" id="missionRequiredTime" class="input" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" id="missionActive" class="checkbox" checked> Active
+                        </label>
+                    </div>
+                    <div class="flex" style="gap: 12px;">
+                        <button type="submit" class="btn btn-success">Create Mission</button>
+                        <button type="button" onclick="closeModal()" class="btn">Cancel</button>
+                    </div>
+                </form>
+            `);
+            
+            document.getElementById('createMissionForm').addEventListener('submit', createMission);
         }
 
         function showCreatePromoModal() {
-            console.log('Create promo modal');
+            showModal('Create Promo Codes', `
+                <form id="createPromoForm">
+                    <div class="form-group">
+                        <label class="form-label">Promo Codes (one per line)</label>
+                        <textarea id="promoCodes" class="textarea" placeholder="CODE1\nCODE2\nCODE3" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Reward (DRX)</label>
+                        <input type="number" id="promoReward" class="input" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <input type="text" id="promoDescription" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Expires At (optional)</label>
+                        <input type="datetime-local" id="promoExpiresAt" class="input">
+                    </div>
+                    <div class="flex" style="gap: 12px;">
+                        <button type="submit" class="btn btn-success">Create Codes</button>
+                        <button type="button" onclick="closeModal()" class="btn">Cancel</button>
+                    </div>
+                </form>
+            `);
+            
+            document.getElementById('createPromoForm').addEventListener('submit', createPromoCodes);
         }
 
+        function showCreateUserModal() {
+            showModal('Create User', `
+                <form id="createUserForm">
+                    <div class="form-group">
+                        <label class="form-label">User ID</label>
+                        <input type="text" id="newUserId" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">First Name</label>
+                        <input type="text" id="newFirstName" class="input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" id="newLastName" class="input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Balance</label>
+                        <input type="number" id="newBalance" class="input" value="0" step="0.001" required>
+                    </div>
+                    <div class="flex" style="gap: 12px;">
+                        <button type="submit" class="btn btn-success">Create User</button>
+                        <button type="button" onclick="closeModal()" class="btn">Cancel</button>
+                    </div>
+                </form>
+            `);
+            
+            document.getElementById('createUserForm').addEventListener('submit', createUser);
+        }
+
+        // Create functions
+        async function createCategory(e) {
+            e.preventDefault();
+            
+            try {
+                const categoryData = {
+                    id: document.getElementById('categoryId').value,
+                    name: document.getElementById('categoryName').value,
+                    description: document.getElementById('categoryDescription').value,
+                    image: document.getElementById('categoryImage').value,
+                    iconUrl: document.getElementById('categoryIconUrl').value,
+                    active: document.getElementById('categoryActive').checked,
+                    minIdLength: parseInt(document.getElementById('categoryMinIdLength').value),
+                    maxIdLength: parseInt(document.getElementById('categoryMaxIdLength').value),
+                    requiredFields: [],
+                    packages: []
+                };
+                
+                await apiRequest('categories', {
+                    method: 'POST',
+                    body: JSON.stringify(categoryData)
+                });
+                
+                closeModal();
+                loadCategories();
+            } catch (error) {
+                console.error('Failed to create category:', error);
+                alert('Failed to create category');
+            }
+        }
+
+        async function createMission(e) {
+            e.preventDefault();
+            
+            try {
+                const missionData = {
+                    title: document.getElementById('missionTitle').value,
+                    description: document.getElementById('missionDescription').value,
+                    type: document.getElementById('missionType').value,
+                    reward: parseInt(document.getElementById('missionReward').value),
+                    priority: parseInt(document.getElementById('missionPriority').value),
+                    category: document.getElementById('missionCategory').value,
+                    channelId: document.getElementById('missionChannelId').value,
+                    url: document.getElementById('missionUrl').value,
+                    code: document.getElementById('missionCode').value,
+                    requiredTime: document.getElementById('missionRequiredTime').value ? parseInt(document.getElementById('missionRequiredTime').value) : null,
+                    active: document.getElementById('missionActive').checked
+                };
+                
+                await apiRequest('missions', {
+                    method: 'POST',
+                    body: JSON.stringify(missionData)
+                });
+                
+                closeModal();
+                loadMissions();
+            } catch (error) {
+                console.error('Failed to create mission:', error);
+                alert('Failed to create mission');
+            }
+        }
+
+        async function createPromoCodes(e) {
+            e.preventDefault();
+            
+            try {
+                const codes = document.getElementById('promoCodes').value.split('\n').filter(code => code.trim());
+                const reward = parseInt(document.getElementById('promoReward').value);
+                const description = document.getElementById('promoDescription').value;
+                const expiresAt = document.getElementById('promoExpiresAt').value || null;
+                
+                await apiRequest('promo-codes', {
+                    method: 'POST',
+                    body: JSON.stringify({ codes, reward, description, expiresAt })
+                });
+                
+                closeModal();
+                loadPromoCodes();
+            } catch (error) {
+                console.error('Failed to create promo codes:', error);
+                alert('Failed to create promo codes');
+            }
+        }
+
+        async function createUser(e) {
+            e.preventDefault();
+            
+            try {
+                const userData = {
+                    id: document.getElementById('newUserId').value,
+                    firstName: document.getElementById('newFirstName').value,
+                    lastName: document.getElementById('newLastName').value,
+                    balance: parseFloat(document.getElementById('newBalance').value)
+                };
+                
+                await apiRequest('users', {
+                    method: 'POST',
+                    body: JSON.stringify(userData)
+                });
+                
+                closeModal();
+                loadUsers();
+            } catch (error) {
+                console.error('Failed to create user:', error);
+                alert('Failed to create user');
+            }
+        }
+
+        // Edit functions
         function editCategory(categoryId) {
             console.log('Edit category:', categoryId);
+            // Implementation for category editing
         }
 
         function editMission(missionId) {
             console.log('Edit mission:', missionId);
+            // Implementation for mission editing
         }
 
         function deleteCategory(categoryId) {
             if (confirm('Are you sure you want to delete this category?')) {
                 console.log('Delete category:', categoryId);
+                // Implementation for category deletion
             }
         }
 
         function deleteMission(missionId) {
             if (confirm('Are you sure you want to delete this mission?')) {
                 console.log('Delete mission:', missionId);
+                // Implementation for mission deletion
             }
         }
+
+        async function loadUserForEdit(userId) {
+            try {
+                const users = await apiRequest(`users&search=${userId}`);
+                const user = users.users.find(u => u.id === userId);
+                
+                if (user) {
+                    document.getElementById('editFirstName').value = user.first_name;
+                    document.getElementById('editLastName').value = user.last_name || '';
+                    document.getElementById('editBalance').value = user.balance;
+                    document.getElementById('editLevel').value = user.level_num;
+                    document.getElementById('editXp').value = user.xp;
+                }
+            } catch (error) {
+                console.error('Failed to load user for edit:', error);
+            }
+        }
+
+        // Handle edit user form submission
+        document.addEventListener('submit', async function(e) {
+            if (e.target.id === 'editUserForm') {
+                e.preventDefault();
+                
+                try {
+                    const userId = document.getElementById('editUserId').value;
+                    const userData = {
+                        firstName: document.getElementById('editFirstName').value,
+                        lastName: document.getElementById('editLastName').value,
+                        balance: parseFloat(document.getElementById('editBalance').value),
+                        level: parseInt(document.getElementById('editLevel').value),
+                        xp: parseInt(document.getElementById('editXp').value)
+                    };
+                    
+                    await apiRequest(`users&userId=${userId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(userData)
+                    });
+                    
+                    closeModal();
+                    loadUsers();
+                } catch (error) {
+                    console.error('Failed to update user:', error);
+                    alert('Failed to update user');
+                }
+            }
+        });
     </script>
 </body>
 </html>

@@ -23,7 +23,7 @@ class FastSecureAPI {
     }
     
     private function validateSecurity($userId, $authKey, $telegramInitData) {
-        // Get security settings from config.php (not database)
+        // Get security settings from config.php (not database) - ALWAYS fresh values
         $authKeyRequired = AUTH_KEY_DETECTION;
         $ddosProtection = ANTI_DDOS_PROTECTION;
         
@@ -32,6 +32,7 @@ class FastSecureAPI {
             $ip = getClientIP();
             $rateCheck = checkSessionRateLimit($ip);
             if (!$rateCheck['ok']) {
+                $this->log("DDOS protection triggered for IP: $ip - " . $rateCheck['reason']);
                 http_response_code(429);
                 echo json_encode(['error' => 'Rate limit exceeded', 'wait' => $rateCheck['wait'] ?? 0]);
                 exit();
@@ -43,7 +44,9 @@ class FastSecureAPI {
             $telegramData = verifyTelegramInitData($telegramInitData, BOT_TOKEN);
             if (!$telegramData) {
                 $this->log("Invalid Telegram init data for user: $userId");
-                return false;
+                http_response_code(401);
+                echo json_encode(['error' => 'Invalid Telegram authorization']);
+                exit();
             }
             
             // Extract and validate user data from init data
@@ -51,16 +54,25 @@ class FastSecureAPI {
                 $userData = json_decode($telegramData['user'], true);
                 if (!$userData || $userData['id'] != $userId) {
                     $this->log("User ID mismatch in init data: $userId");
-                    return false;
+                    http_response_code(401);
+                    echo json_encode(['error' => 'User ID mismatch']);
+                    exit();
                 }
             }
+        } else {
+            $this->log("Missing Telegram init data for user: $userId");
+            http_response_code(401);
+            echo json_encode(['error' => 'Telegram init data required']);
+            exit();
         }
         
         // AuthKey validation (if enabled in config.php)
         if ($authKeyRequired) {
             if (empty($authKey)) {
                 $this->log("Missing auth key for user: $userId");
-                return false;
+                http_response_code(401);
+                echo json_encode(['error' => 'Auth key required']);
+                exit();
             }
             
             $stmt = $this->db->prepare("SELECT id, status FROM users WHERE id = ? AND auth_key = ?");
@@ -69,11 +81,15 @@ class FastSecureAPI {
             
             if (!$user) {
                 $this->log("Invalid auth key for user: $userId");
-                return false;
+                http_response_code(401);
+                echo json_encode(['error' => 'Invalid auth key']);
+                exit();
             }
             
             if ($user['status'] === 'banned') {
-                return 'banned';
+                http_response_code(403);
+                echo json_encode(['error' => 'User is banned', 'banned' => true]);
+                exit();
             }
             
             return true;
@@ -84,11 +100,15 @@ class FastSecureAPI {
             $user = $stmt->fetch();
             
             if (!$user) {
-                return false;
+                http_response_code(404);
+                echo json_encode(['error' => 'User not found']);
+                exit();
             }
             
             if ($user['status'] === 'banned') {
-                return 'banned';
+                http_response_code(403);
+                echo json_encode(['error' => 'User is banned', 'banned' => true]);
+                exit();
             }
             
             return true;
@@ -172,6 +192,7 @@ class FastSecureAPI {
         if ($telegramInitData) {
             $telegramData = verifyTelegramInitData($telegramInitData, BOT_TOKEN);
             if (!$telegramData) {
+                $this->log("Invalid Telegram init data during auth for user: $userId");
                 http_response_code(401);
                 echo json_encode(['error' => 'Invalid Telegram authorization']);
                 return;
@@ -181,6 +202,7 @@ class FastSecureAPI {
             if (isset($telegramData['user'])) {
                 $userData = json_decode($telegramData['user'], true);
                 if (!$userData || $userData['id'] != $userId) {
+                    $this->log("User ID mismatch during auth: $userId");
                     http_response_code(401);
                     echo json_encode(['error' => 'User ID mismatch']);
                     return;
@@ -300,18 +322,7 @@ class FastSecureAPI {
     private function handleUser($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ?");
@@ -607,18 +618,7 @@ class FastSecureAPI {
     private function handleUserMissions($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt = $this->db->prepare("SELECT * FROM user_missions WHERE user_id = ?");
@@ -692,18 +692,7 @@ class FastSecureAPI {
     private function handleReferrals($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
             http_response_code(405);
@@ -743,18 +732,7 @@ class FastSecureAPI {
     private function handleConversions($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt = $this->db->prepare("SELECT * FROM conversions WHERE user_id = ? ORDER BY requested_at DESC");
@@ -907,18 +885,7 @@ class FastSecureAPI {
         $userId = $_GET['userId'] ?? '';
         $channelId = $_GET['channelId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         // Backend verifies channel membership without exposing bot token
         try {
@@ -956,18 +923,7 @@ class FastSecureAPI {
     private function handlePromoCodeSubmission($authKey, $telegramInitData) {
         $userId = $_GET['userId'] ?? '';
         
-        $validation = $this->validateSecurity($userId, $authKey, $telegramInitData);
-        if ($validation === false) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            return;
-        }
-        
-        if ($validation === 'banned') {
-            http_response_code(403);
-            echo json_encode(['error' => 'User is banned', 'banned' => true]);
-            return;
-        }
+        $this->validateSecurity($userId, $authKey, $telegramInitData);
         
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);

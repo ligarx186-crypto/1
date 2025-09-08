@@ -179,7 +179,7 @@ class TelegramBot {
             if (!empty($userData['avatar_url'])) {
                 $localAvatarUrl = $this->downloadAndSaveAvatar($userData['id'], $userData['avatar_url']);
                 if (empty($localAvatarUrl)) {
-                    $this->log("Avatar download failed for user {$userData['id']}, continuing without avatar");
+                    $this->logError("Avatar download failed for user {$userData['id']}, continuing without avatar");
                 }
             }
             
@@ -245,6 +245,8 @@ class TelegramBot {
                     $stmt = $this->db->prepare("UPDATE users SET avatar_url = ?, last_active = ? WHERE id = ?");
                     $stmt->execute([$localAvatarUrl, time() * 1000, $userId]);
                     $this->log("Avatar updated for user $userId");
+                } else {
+                    $this->logError("Failed to update avatar for user $userId");
                 }
             }
         } catch (Exception $e) {

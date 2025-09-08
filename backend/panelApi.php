@@ -115,87 +115,57 @@ class AdminPanelAPI {
         try {
             $now = time() * 1000;
             $oneDayAgo = $now - (24 * 60 * 60 * 1000);
-            $oneWeekAgo = $now - (7 * 24 * 60 * 60 * 1000);
-            $oneMonthAgo = $now - (30 * 24 * 60 * 60 * 1000);
             
-            // User statistics
-            $totalUsers = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn() ?: 0;
+            // User statistics with error handling
+            $totalUsers = 0;
+            $activeToday = 0;
+            $totalEarned = 0;
+            $pendingConversions = 0;
             
-            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE last_active >= ?");
-            $stmt->execute([$oneDayAgo]);
-            $activeToday = $stmt->fetchColumn() ?: 0;
+            try {
+                $totalUsers = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn() ?: 0;
+            } catch (Exception $e) {
+                $this->log("Failed to get total users: " . $e->getMessage());
+            }
             
-            $stmt->execute([$oneWeekAgo]);
-            $activeWeek = $stmt->fetchColumn() ?: 0;
+            try {
+                $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE last_active >= ?");
+                $stmt->execute([$oneDayAgo]);
+                $activeToday = $stmt->fetchColumn() ?: 0;
+            } catch (Exception $e) {
+                $this->log("Failed to get active users: " . $e->getMessage());
+            }
             
-            $stmt->execute([$oneMonthAgo]);
-            $activeMonth = $stmt->fetchColumn() ?: 0;
+            try {
+                $totalEarned = $this->db->query("SELECT SUM(total_earned) FROM users")->fetchColumn() ?: 0;
+            } catch (Exception $e) {
+                $this->log("Failed to get total earned: " . $e->getMessage());
+            }
             
-            $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE joined_at >= ?");
-            $stmt->execute([$oneDayAgo]);
-            $newToday = $stmt->fetchColumn() ?: 0;
-            
-            // Conversion statistics
-            $totalConversions = $this->db->query("SELECT COUNT(*) FROM conversions")->fetchColumn() ?: 0;
-            $pendingConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'pending'")->fetchColumn() ?: 0;
-            $approvedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'approved'")->fetchColumn() ?: 0;
-            $rejectedConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'rejected'")->fetchColumn() ?: 0;
-            
-            // Mining statistics
-            $activeMining = $this->db->query("SELECT COUNT(*) FROM users WHERE is_mining = TRUE")->fetchColumn() ?: 0;
-            $totalEarned = $this->db->query("SELECT SUM(total_earned) FROM users")->fetchColumn() ?: 0;
-            
-            // Mission statistics
-            $totalMissions = $this->db->query("SELECT COUNT(*) FROM missions WHERE active = TRUE")->fetchColumn() ?: 0;
-            $completedMissions = $this->db->query("SELECT COUNT(*) FROM user_missions WHERE completed = TRUE")->fetchColumn() ?: 0;
-            
-            // Promo code statistics
-            $totalPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes")->fetchColumn() ?: 0;
-            $usedPromoCodes = $this->db->query("SELECT COUNT(*) FROM promo_codes WHERE used_by IS NOT NULL")->fetchColumn() ?: 0;
-            
-            // Referral statistics
-            $totalReferrals = $this->db->query("SELECT COUNT(*) FROM referrals")->fetchColumn() ?: 0;
+            try {
+                $pendingConversions = $this->db->query("SELECT COUNT(*) FROM conversions WHERE status = 'pending'")->fetchColumn() ?: 0;
+            } catch (Exception $e) {
+                $this->log("Failed to get pending conversions: " . $e->getMessage());
+            }
             
             echo json_encode([
                 'users' => [
                     'total' => (int)$totalUsers,
-                    'activeToday' => (int)$activeToday,
-                    'activeWeek' => (int)$activeWeek,
-                    'activeMonth' => (int)$activeMonth,
-                    'newToday' => (int)$newToday
-                ],
-                'conversions' => [
-                    'total' => (int)$totalConversions,
-                    'pending' => (int)$pendingConversions,
-                    'approved' => (int)$approvedConversions,
-                    'rejected' => (int)$rejectedConversions
+                    'activeToday' => (int)$activeToday
                 ],
                 'mining' => [
-                    'activeMining' => (int)$activeMining,
                     'totalEarned' => (float)$totalEarned
                 ],
-                'missions' => [
-                    'total' => (int)$totalMissions,
-                    'completed' => (int)$completedMissions
-                ],
-                'promoCodes' => [
-                    'total' => (int)$totalPromoCodes,
-                    'used' => (int)$usedPromoCodes,
-                    'available' => (int)($totalPromoCodes - $usedPromoCodes)
-                ],
-                'referrals' => [
-                    'total' => (int)$totalReferrals
+                'conversions' => [
+                    'pending' => (int)$pendingConversions
                 ]
             ]);
         } catch (Exception $e) {
             $this->log("Stats error: " . $e->getMessage());
             echo json_encode([
-                'users' => ['total' => 0, 'activeToday' => 0, 'activeWeek' => 0, 'activeMonth' => 0, 'newToday' => 0],
-                'conversions' => ['total' => 0, 'pending' => 0, 'approved' => 0, 'rejected' => 0],
-                'mining' => ['activeMining' => 0, 'totalEarned' => 0],
-                'missions' => ['total' => 0, 'completed' => 0],
-                'promoCodes' => ['total' => 0, 'used' => 0, 'available' => 0],
-                'referrals' => ['total' => 0]
+                'users' => ['total' => 0, 'activeToday' => 0],
+                'mining' => ['totalEarned' => 0],
+                'conversions' => ['pending' => 0]
             ]);
         }
     }
@@ -327,6 +297,131 @@ class AdminPanelAPI {
             } else {
                 http_response_code(500);
                 echo json_encode(['error' => 'Failed to create user']);
+            }
+        }
+    }
+    
+    private function handleCategories($adminEmail) {
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            $stmt = $this->db->prepare("SELECT * FROM wallet_categories ORDER BY priority ASC, created_at DESC");
+            $stmt->execute();
+            $categories = $stmt->fetchAll();
+            
+            $result = [];
+            foreach ($categories as $category) {
+                $result[] = [
+                    'id' => $category['id'],
+                    'name' => $category['name'],
+                    'description' => $category['description'],
+                    'image' => $category['image'],
+                    'active' => (bool)$category['active'],
+                    'conversionRate' => (float)$category['conversion_rate'],
+                    'minConversion' => (int)$category['min_conversion'],
+                    'maxConversion' => (int)$category['max_conversion'],
+                    'processingTime' => $category['processing_time'],
+                    'instructions' => $category['instructions'],
+                    'iconUrl' => $category['icon_url'],
+                    'minIdLength' => (int)$category['min_id_length'],
+                    'maxIdLength' => (int)$category['max_id_length'],
+                    'packages' => json_decode($category['packages'], true) ?: [],
+                    'requiredFields' => json_decode($category['required_fields'], true) ?: []
+                ];
+            }
+            
+            echo json_encode($result);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            
+            $stmt = $this->db->prepare("INSERT INTO wallet_categories (
+                id, name, description, image, icon_url, active, conversion_rate,
+                min_conversion, max_conversion, processing_time, instructions,
+                required_fields, packages, priority, min_id_length, max_id_length
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            
+            $result = $stmt->execute([
+                $input['id'],
+                $input['name'],
+                $input['description'],
+                $input['image'],
+                $input['iconUrl'] ?? '',
+                $input['active'] ?? true,
+                $input['conversionRate'] ?? 1,
+                $input['minConversion'] ?? 1,
+                $input['maxConversion'] ?? 10000,
+                $input['processingTime'] ?? '24-48 hours',
+                $input['instructions'] ?? '',
+                json_encode($input['requiredFields'] ?? []),
+                json_encode($input['packages'] ?? []),
+                $input['priority'] ?? 999,
+                $input['minIdLength'] ?? 9,
+                $input['maxIdLength'] ?? 12
+            ]);
+            
+            if ($result) {
+                echo json_encode(['success' => true]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to create category']);
+            }
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+            $categoryId = $_GET['categoryId'] ?? '';
+            $input = json_decode(file_get_contents('php://input'), true);
+            
+            if (empty($categoryId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Category ID required']);
+                return;
+            }
+            
+            $stmt = $this->db->prepare("UPDATE wallet_categories SET 
+                name = ?, description = ?, image = ?, icon_url = ?, active = ?,
+                conversion_rate = ?, min_conversion = ?, max_conversion = ?,
+                processing_time = ?, instructions = ?, required_fields = ?,
+                packages = ?, priority = ?, min_id_length = ?, max_id_length = ?
+                WHERE id = ?");
+            
+            $result = $stmt->execute([
+                $input['name'],
+                $input['description'],
+                $input['image'],
+                $input['iconUrl'] ?? '',
+                $input['active'] ?? true,
+                $input['conversionRate'] ?? 1,
+                $input['minConversion'] ?? 1,
+                $input['maxConversion'] ?? 10000,
+                $input['processingTime'] ?? '24-48 hours',
+                $input['instructions'] ?? '',
+                json_encode($input['requiredFields'] ?? []),
+                json_encode($input['packages'] ?? []),
+                $input['priority'] ?? 999,
+                $input['minIdLength'] ?? 9,
+                $input['maxIdLength'] ?? 12,
+                $categoryId
+            ]);
+            
+            if ($result) {
+                echo json_encode(['success' => true]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to update category']);
+            }
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+            $categoryId = $_GET['categoryId'] ?? '';
+            
+            if (empty($categoryId)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Category ID required']);
+                return;
+            }
+            
+            $stmt = $this->db->prepare("DELETE FROM wallet_categories WHERE id = ?");
+            $result = $stmt->execute([$categoryId]);
+            
+            if ($result) {
+                echo json_encode(['success' => true]);
+            } else {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete category']);
             }
         }
     }
@@ -574,131 +669,6 @@ class AdminPanelAPI {
             } else {
                 http_response_code(500);
                 echo json_encode(['error' => 'Failed to update conversion']);
-            }
-        }
-    }
-    
-    private function handleCategories($adminEmail) {
-        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            $stmt = $this->db->prepare("SELECT * FROM wallet_categories ORDER BY priority ASC, created_at DESC");
-            $stmt->execute();
-            $categories = $stmt->fetchAll();
-            
-            $result = [];
-            foreach ($categories as $category) {
-                $result[] = [
-                    'id' => $category['id'],
-                    'name' => $category['name'],
-                    'description' => $category['description'],
-                    'image' => $category['image'],
-                    'active' => (bool)$category['active'],
-                    'conversionRate' => (float)$category['conversion_rate'],
-                    'minConversion' => (int)$category['min_conversion'],
-                    'maxConversion' => (int)$category['max_conversion'],
-                    'processingTime' => $category['processing_time'],
-                    'instructions' => $category['instructions'],
-                    'iconUrl' => $category['icon_url'],
-                    'minIdLength' => (int)$category['min_id_length'],
-                    'maxIdLength' => (int)$category['max_id_length'],
-                    'packages' => json_decode($category['packages'], true) ?: [],
-                    'requiredFields' => json_decode($category['required_fields'], true) ?: []
-                ];
-            }
-            
-            echo json_encode($result);
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $input = json_decode(file_get_contents('php://input'), true);
-            
-            $stmt = $this->db->prepare("INSERT INTO wallet_categories (
-                id, name, description, image, icon_url, active, conversion_rate,
-                min_conversion, max_conversion, processing_time, instructions,
-                required_fields, packages, priority, min_id_length, max_id_length
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            
-            $result = $stmt->execute([
-                $input['id'],
-                $input['name'],
-                $input['description'],
-                $input['image'],
-                $input['iconUrl'] ?? '',
-                $input['active'] ?? true,
-                $input['conversionRate'] ?? 1,
-                $input['minConversion'] ?? 1,
-                $input['maxConversion'] ?? 10000,
-                $input['processingTime'] ?? '24-48 hours',
-                $input['instructions'] ?? '',
-                json_encode($input['requiredFields'] ?? []),
-                json_encode($input['packages'] ?? []),
-                $input['priority'] ?? 999,
-                $input['minIdLength'] ?? 9,
-                $input['maxIdLength'] ?? 12
-            ]);
-            
-            if ($result) {
-                echo json_encode(['success' => true]);
-            } else {
-                http_response_code(500);
-                echo json_encode(['error' => 'Failed to create category']);
-            }
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
-            $categoryId = $_GET['categoryId'] ?? '';
-            $input = json_decode(file_get_contents('php://input'), true);
-            
-            if (empty($categoryId)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Category ID required']);
-                return;
-            }
-            
-            $stmt = $this->db->prepare("UPDATE wallet_categories SET 
-                name = ?, description = ?, image = ?, icon_url = ?, active = ?,
-                conversion_rate = ?, min_conversion = ?, max_conversion = ?,
-                processing_time = ?, instructions = ?, required_fields = ?,
-                packages = ?, priority = ?, min_id_length = ?, max_id_length = ?
-                WHERE id = ?");
-            
-            $result = $stmt->execute([
-                $input['name'],
-                $input['description'],
-                $input['image'],
-                $input['iconUrl'] ?? '',
-                $input['active'] ?? true,
-                $input['conversionRate'] ?? 1,
-                $input['minConversion'] ?? 1,
-                $input['maxConversion'] ?? 10000,
-                $input['processingTime'] ?? '24-48 hours',
-                $input['instructions'] ?? '',
-                json_encode($input['requiredFields'] ?? []),
-                json_encode($input['packages'] ?? []),
-                $input['priority'] ?? 999,
-                $input['minIdLength'] ?? 9,
-                $input['maxIdLength'] ?? 12,
-                $categoryId
-            ]);
-            
-            if ($result) {
-                echo json_encode(['success' => true]);
-            } else {
-                http_response_code(500);
-                echo json_encode(['error' => 'Failed to update category']);
-            }
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-            $categoryId = $_GET['categoryId'] ?? '';
-            
-            if (empty($categoryId)) {
-                http_response_code(400);
-                echo json_encode(['error' => 'Category ID required']);
-                return;
-            }
-            
-            $stmt = $this->db->prepare("DELETE FROM wallet_categories WHERE id = ?");
-            $result = $stmt->execute([$categoryId]);
-            
-            if ($result) {
-                echo json_encode(['success' => true]);
-            } else {
-                http_response_code(500);
-                echo json_encode(['error' => 'Failed to delete category']);
             }
         }
     }

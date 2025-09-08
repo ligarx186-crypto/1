@@ -198,9 +198,21 @@ Join now: ${referralLink}`
         />
         <div className="absolute inset-0 bg-black/20 z-10" />
         <div className="relative z-20 text-center">
-          <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-lg font-semibold">Authenticating...</p>
-          <p className="text-gray-300 text-sm mt-2">Verifying your credentials</p>
+          {user.banned ? (
+            <>
+              <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-white text-2xl">🚫</span>
+              </div>
+              <p className="text-red-400 text-lg font-semibold">Account Banned</p>
+              <p className="text-gray-300 text-sm mt-2">Your account has been suspended</p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-white text-lg font-semibold">Authenticating...</p>
+              <p className="text-gray-300 text-sm mt-2">Verifying your credentials</p>
+            </>
+          )}
         </div>
       </div>
     )
