@@ -5,7 +5,7 @@ define('DB_NAME', 'c828_ligarx');
 define('DB_USER', 'c828_ligarx');
 define('DB_PASS', 'ligarx');
 
-// Bot configuration
+// Bot configuration (moved from database to config.php for speed)
 define('BOT_TOKEN', '8188857509:AAHjKKUaC_kljF1KKHZ0VW1pWkcWDfaY65k');
 define('BOT_USERNAME', 'tanga');
 define('WEBAPP_URL', 'https://your-domain.com');
@@ -16,7 +16,7 @@ define('AUTH_KEY_DETECTION', true); // Set to false to disable authKey validatio
 define('ANTI_DDOS_PROTECTION', true); // Set to false to disable anti-DDoS
 
 // Rate limiting configuration (session-based for speed)
-define('DDOS_RATE_LIMIT', 100); // 100 requests per minute
+define('DDOS_RATE_LIMIT', 120); // 120 requests per minute
 define('DDOS_TIME_WINDOW', 60); // 1 minute window
 define('DDOS_BAN_DURATION', 300); // 5 minutes ban
 
@@ -236,7 +236,7 @@ class Database {
                 INDEX idx_priority (priority)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
             
-            // Insert default config (only bot username and banner)
+            // Insert default config values
             $this->pdo->exec("INSERT IGNORE INTO config (setting_key, setting_value) VALUES 
                 ('bot_username', '" . BOT_USERNAME . "'),
                 ('banner_url', 'https://mining-master.onrender.com//assets/banner-BH8QO14f.png')");
@@ -319,7 +319,7 @@ function verifyTelegramInitData($initData, $botToken) {
 }
 
 /**
- * Get client IP address
+ * Get client IP address properly
  */
 function getClientIP() {
     $ipKeys = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
